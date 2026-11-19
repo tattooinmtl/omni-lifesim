@@ -122,6 +122,7 @@ details ul{padding-left:18px;margin:6px 0}
 .gene{display:grid;grid-template-columns:minmax(0,1fr) 70px 34px;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
 .gene span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gene b{font-family:var(--f-mono);font-weight:500;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+.log .k-danger b::after{content:" ⚠";color:#ffb36b} .log .k-weather b{color:#9fb5c9!important}
 .log .k-birth b::after{content:" ✦";color:var(--good)} .log .k-death{opacity:.8} .log .k-egg b::after{content:" ●";color:#f5efdc} .log .k-mate b::after{content:" ♥";color:#f5a3c7}
 .treeModal{position:absolute;inset:12px;z-index:18;background:rgba(9,16,13,.96);border:1px solid rgba(255,255,255,.1);border-radius:10px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.45)}
 .tm-head{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.08);flex-wrap:wrap}
@@ -232,7 +233,17 @@ details ul{padding-left:18px;margin:6px 0}
       <div class="card-head"><h2>Population</h2><button class="tree-btn" id="treeBtn" type="button">Family tree &amp; timeline</button></div>
       <div class="counts" id="popStats"></div>
       <div class="poplist" id="popList"></div>
-      <div class="row"><label title="Every 14 fly-days an unrelated fly arrives from outside"><input type="checkbox" id="wild" checked> Wild flies arrive now and then</label><button id="wildNow" type="button">Add a wild fly now</button></div>
+      <div class="row"><label title="Every 14 fly-days an unrelated fly arrives from outside; every 5 days when fewer than 4 adults are left"><input type="checkbox" id="wild" checked> Wild flies arrive now and then</label><button id="wildNow" type="button">Add a wild fly now</button></div>
+    </div>
+
+    <div class="card env">
+      <div class="card-head"><h2>Environment</h2><select id="food" aria-label="Food supply" title="How fast clover nectar refills"><option value="famine">Food: famine</option><option value="lean" selected>Food: lean (they compete)</option><option value="plenty">Food: plenty</option></select></div>
+      <div class="row">
+        <label title="Birds swoop at flies by day. Only a fast Giant Fiber escape saves them."><input type="checkbox" id="birds" checked> Birds</label>
+        <label title="Webs hang between plants at flying height. Stuck flies must tear free before the spider arrives."><input type="checkbox" id="spiders" checked> Spider webs</label>
+        <label title="Cold nights and rainstorms make flying costly; rain can knock flies down."><input type="checkbox" id="weather" checked> Night &amp; rain</label>
+      </div>
+      <div class="counts" id="deathStats">No deaths yet.</div>
     </div>
 
     <div id="cards"></div>
@@ -250,7 +261,8 @@ details ul{padding-left:18px;margin:6px 0}
         <li><b>Mating</b>: a mature, receptive female picks the least related free male (by kinship from the family tree). After mating she carries a clutch of eggs and, like a real fly after sex peptide, rejects males for 1.5 days.</li>
         <li><b>Eggs</b>: she flies to rotting fruit and lays them. Each fruit holds 6 young at most, and the garden holds 20 adults; clover nectar is the only real food, so a crowded garden goes hungry.</li>
         <li><b>Inbreeding</b>: children of relatives have a higher inbreeding coefficient, which shortens their life and shrinks their clutches.</li>
-        <li><b>Death</b>: old age, or two days with an empty stomach.</li>
+        <li><b>Death</b> comes in many ways. The risk of dying of old age rises steeply with age (a Gompertz curve, as in real flies), sooner for inbred flies. Two days with an empty stomach kills. Birds swoop by day and kill 85% of the flies they catch, and 35% even of those that jump away, so a quick Giant Fiber escape (a heritable threshold) improves the odds without guaranteeing them. Spider webs hang at flying height near the clover; a stuck fly has a few seconds to tear free, which strong, well-fed flies do more often. Cold nights and rainstorms make flying expensive, and heavy rain knocks flies down and drowns weak ones.</li>
+        <li><b>Food</b> is the bottleneck. Only one fly can feed on a clover at a time, and nectar refills slowly, so flies compete. Larvae eat the rotting fruit; when a fruit is eaten bare, the larvae left on it starve, and the fruit slowly rots back.</li>
       </ul>
     </details>
     <details>
@@ -301,7 +313,7 @@ camera.position.set(0, 18, 26);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1, 0); controls.maxPolarAngle = Math.PI * 0.48; controls.minDistance = 3; controls.maxDistance = 60; controls.enableDamping = true;
 
-scene.add(new THREE.HemisphereLight('#dff0ff', '#4f6e2c', 0.85));
+const hemi = new THREE.HemisphereLight('#dff0ff', '#4f6e2c', 0.85); scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff3dc', 0.95);
 sun.position.set(14, 24, 8); sun.castShadow = true;
 sun.shadow.mapSize.set(1536, 1536);
@@ -371,7 +383,7 @@ function buildFlowers() {
       }
     }
     scene.add(grp);
-    flowers.push({ type, x, z, top, nectar: 1, headMat, baseColor: headMat ? headMat.color.clone() : null });
+    flowers.push({ type, x, z, top, nectar: 1, flesh: 1, occupant: null, fruitMesh: type === 'fruit' ? grp.children[0] : null, headMat, baseColor: headMat ? headMat.color.clone() : null });
   }
 }
 buildFlowers();
@@ -409,7 +421,7 @@ function paintOdor() {
 // One fly day = DAY sim-seconds. Durations follow real Drosophila at 25 °C, compressed:
 // egg ~1 day, larva ~4 days, pupa ~4 days (egg to adult ~9-10 days), adult life ~40 days.
 const DAY = 20;
-const EGG_DAYS = 1, LARVA_DAYS = 4, PUPA_DAYS = 4, LIFE_DAYS = 40, MATURE_DAYS = 0.5, REFRACT_DAYS = 1.5;
+const EGG_DAYS = 1, LARVA_DAYS = 4, PUPA_DAYS = 4, LIFE_DAYS = 30, MATURE_DAYS = 0.5, REFRACT_DAYS = 1.5;
 const MAX_ADULTS = 20, FRUIT_CAP = 6, WILD_EVERY_DAYS = 14;
 const GENES = {
   ornE: ['Ester smell (Or42b)', 0.5, 1.5, 1], ornT: ['Terpene smell', 0.5, 1.5, 1], ornG: ['Geosmin smell (Or56a)', 0.5, 1.5, 1],
@@ -582,7 +594,7 @@ class Fly {
     if (this.mate && !this.mate.dead) return { x: this.mate.x, z: this.mate.z, kind: 'mate' };
     if (this.sex === 'F' && this.eggs > 0) {
       let best = null, bd = 1e9;
-      for (const f of flowers) if (f.type === 'fruit') { const room = FRUIT_CAP - broodOn(f), d = Math.hypot(f.x - this.x, f.z - this.z) + (room > 0 ? 0 : 30); if (d < bd) { bd = d; best = f; } }
+      for (const f of flowers) if (f.type === 'fruit') { const room = f.flesh < 0.15 ? 0 : FRUIT_CAP - broodOn(f), d = Math.hypot(f.x - this.x, f.z - this.z) + (room > 0 ? 0 : 30); if (d < bd) { bd = d; best = f; } }
       this.goalFruit = best; return best ? { x: best.x, z: best.z, kind: 'lay' } : null;
     }
     return null;
@@ -615,7 +627,8 @@ class Fly {
       threatDir = [dx / d, dy / d, dz / d];
       if (d < 0.75 && !th.done) {
         th.done = true;
-        if (this.state !== 'escape') { this.breakMating(sim); this.state = 'stunned'; this.timer = 2.5; this.shock = 0.9; this.energy = Math.max(0, this.energy - 0.05); this.counts.hits++; sim.log(this, `got hit by the shadow. PPL1 dopamine fires and punishes whatever it smells right now.`); this.flower = null; }
+        if (th.predator && grand() < (this.state === 'escape' ? 0.35 : 0.85)) { { sim.log(this, 'was caught by a bird.', 'danger'); die(this, 'caught by a bird', sim); return; } }
+        if (this.state !== 'escape') { this.breakMating(sim); this.state = 'stunned'; this.timer = 2.5; this.shock = 0.9; this.energy = Math.max(0, this.energy - 0.05); this.counts.hits++; sim.log(this, th.predator ? 'was grabbed by a bird but wriggled free. PPL1 dopamine fires.' : `got hit by the shadow. PPL1 dopamine fires and punishes whatever it smells right now.`); this.flower = null; }
       }
     }
     n.lpL = lpL; n.lpR = lpR;
@@ -663,14 +676,16 @@ class Fly {
     n.dnF = sat(0.4 + 0.5 * Math.abs(approach) + (goal ? 0.4 : 0));
 
     let near = 0, best = null, bd = 1e9;
-    for (const f of flowers) { const d = Math.hypot(f.x - hx, f.z - hz); if (d < bd && !(f === this.lastFlower && sim.t - this.lastFlowerT < 9)) { bd = d; best = f; } }
+    for (const f of flowers) { if (f.occupant && f.occupant !== this && !f.occupant.dead && f.occupant.flower === f) continue; const d = Math.hypot(f.x - hx, f.z - hz); if (d < bd && !(f === this.lastFlower && sim.t - this.lastFlowerT < 9)) { bd = d; best = f; } }
     near = best ? Math.exp(-bd * bd / 1.2) : 0;
     n.dnLand = (this.state === 'flying' && this.cool <= 0 && !goal) ? sat(approach * 2.2 * near) : (goal && goal.kind === 'lay' ? sat(1.6 - Math.hypot(goal.x - this.x, goal.z - this.z)) : 0);
     n.mn = this.state === 'feeding' ? sat(sug * (1 - bit)) : 0;
 
     n.gf = this.gfFlash > 0 ? 1 : 0; this.gfFlash = Math.max(0, this.gfFlash - dt);
     if (!this.lesion.gf && Math.max(lpL, lpR) > p.gfThr && threatDir && (this.state === 'flying' || this.state === 'feeding' || this.state === 'laying')) {
-      this.state = 'escape'; this.timer = 0.4; this.gfFlash = 0.4; n.gf = 1; this.counts.escapes++; this.laying = false;
+      this.state = 'escape'; this.timer = 0.4; this.gfFlash = 0.4; n.gf = 1; this.counts.escapes++;
+      // the earlier the jump (lower heritable threshold, bird still far), the better the chance the bird loses track
+      if (th) { const bd = Math.hypot(th.x - this.x, th.y - this.y, th.z - this.z); th.lost = !th.predator || grand() < sat((bd - 0.8) / 3); } this.laying = false;
       const hl = Math.hypot(threatDir[0], threatDir[2]) || 1;
       this.vx = -threatDir[0] / hl * 9; this.vz = -threatDir[2] / hl * 9; this.vy = 4;
       this.th = Math.atan2(this.vz, this.vx); this.flower = null; this.cool = 2;
@@ -686,14 +701,22 @@ class Fly {
         let homing = 1;
         if (goal) { const gd = Math.hypot(goal.x - this.x, goal.z - this.z); if (gd < 3.5) { this.th = wrapAngle(this.th + wrapAngle(Math.atan2(goal.z - this.z, goal.x - this.x) - this.th) * Math.min(1, 8 * dt)); homing = 0.35 + 0.65 * gd / 3.5; } }
         const waiting = (this.mate && this.sex === 'F' ? 0.45 : 1) * homing; // a receptive female slows for her suitor
-        const sp = (1.3 + 2.3 * n.dnF) * (0.45 + 0.55 * Math.min(1, this.energy * 2 + 0.2)) * p.speed * (1 - 0.5 * old) * waiting;
+        const sp = (1.3 + 2.3 * n.dnF) * (0.45 + 0.55 * Math.min(1, this.energy * 2 + 0.2)) * p.speed * (1 - 0.5 * old) * waiting * env.speedMul();
+        const px = this.x, py = this.y, pz = this.z;
         this.x += Math.cos(this.th) * sp * dt; this.z += Math.sin(this.th) * sp * dt;
+        if (webCheck(this, px, py, pz)) break;
+        // heavy rain can knock a flying fly out of the air; a weak one drowns
+        if (env.rain > 0.3 && grand() < 0.012 * env.rain * dt) {
+          if (this.energy < 0.2) { sim.log(this, 'was knocked down by the rain and drowned.', 'danger'); die(this, 'drowned in the rain', sim); return; }
+          this.breakMating(sim); this.state = 'stunned'; this.timer = 3; this.energy = Math.max(0, this.energy - 0.08);
+          if (this === sel) sim.log(this, 'was knocked down by the rain.', 'weather'); break;
+        }
         const alt = 2.2 + 0.35 * Math.sin(sim.t * 0.7 + this.id * 2.1);
         this.y += (alt - this.y) * 1.5 * dt;
-        this.energy = Math.max(0, this.energy - 0.011 * dt);
+        this.energy = Math.max(0, this.energy - 0.011 * env.flyCost() * dt);
         if (goal && goal.kind === 'mate' && this.mate && Math.hypot(this.mate.x - this.x, this.mate.z - this.z) < 1.1 && this.mate.state === 'flying') startMating(this, this.mate, sim);
         else if (goal && goal.kind === 'lay' && this.goalFruit && Math.hypot(this.goalFruit.x - this.x, this.goalFruit.z - this.z) < 1.3) { this.state = 'landing'; this.flower = this.goalFruit; this.laying = true; }
-        else if (!goal && n.dnLand > 0.45 && best && bd < 1.4) { this.state = 'landing'; this.flower = best; }
+        else if (!goal && n.dnLand > 0.45 && best && bd < 1.4) { this.state = 'landing'; this.flower = best; best.occupant = this; }
         break;
       }
       case 'landing': {
@@ -732,6 +755,17 @@ class Fly {
         this.timer -= dt; if (this.timer <= 0) this.state = 'flying';
         break;
       }
+      case 'stuck': { // in a spider web: struggle; fast, well-fed flies tear free more often
+        this.timer += dt; this.energy = Math.max(0, this.energy - 0.03 * dt);
+        if (grand() < 0.22 * p.speed * (0.25 + this.energy) * dt) {
+          this.web.prey = null; this.web = null; this.state = 'flying'; this.cool = 2; this.th = wrapAngle(this.th + Math.PI); this.x -= Math.cos(this.th) * -0.3;
+          sim.log(this, 'tore free from the spider web.', 'danger');
+        } else if (this.timer > 4) {
+          const w = this.web; w.prey = null; w.relocate = DAY * 1.5; this.web = null;
+          sim.log(this, 'was eaten by a spider.', 'danger'); die(this, 'eaten by a spider', sim); return;
+        }
+        break;
+      }
       case 'stunned': {
         this.y += (0.35 - this.y) * 2 * dt; this.timer -= dt;
         if (this.timer <= 0) { this.state = 'flying'; this.cool = 3; }
@@ -744,7 +778,8 @@ class Fly {
     if (this.mate && this.state === 'flying' && sim.t - this.mateT > DAY * 0.6) this.breakMating(sim);
     // death: old age or starvation
     if (this.energy <= 0) this.starve += dt; else this.starve = 0;
-    if (this.age > this.lifespan) die(this, 'old age', sim);
+    const ageD = this.age / DAY / p.life, hazard = 0.0035 * Math.exp(0.13 * ageD) * (1 + 2 * this.F) / DAY;
+    if (this.age > this.lifespan || grand() < hazard * dt) die(this, 'old age', sim);
     else if (this.starve > DAY * 2) die(this, 'starvation', sim);
 
     this.trailT += dt;
@@ -757,15 +792,16 @@ class Fly {
   }
   breakMating(sim) { const m = this.mate; if (m) { m.mate = null; if (m.state === 'mating') { m.state = 'flying'; m.cool = 2; } } this.mate = null; if (this.state === 'mating') this.state = 'flying'; }
   takeoff(sim, turnBack) {
+    if (this.flower && this.flower.occupant === this) this.flower.occupant = null;
     this.lastFlower = this.flower; this.lastFlowerT = sim.t; this.flower = null;
     this.state = 'flying'; this.cool = 3; this.th = wrapAngle(this.th + turnBack + (this.rand() - .5));
     this.y += 0.1;
   }
   render(t) {
     const g = this.mesh.group; g.position.set(this.x, this.y, this.z); g.rotation.y = -this.th;
-    const flying = this.state !== 'feeding' && this.state !== 'stunned' && this.state !== 'laying' && this.state !== 'mating';
+    const flying = this.state !== 'feeding' && this.state !== 'stunned' && this.state !== 'laying' && this.state !== 'mating' && this.state !== 'stuck';
     for (const w of this.mesh.wings) w.pv.rotation.x = w.sd * (flying ? 0.25 + Math.sin(t * 70) * 0.8 : (this.state === 'mating' && this.sex === 'M' ? 0.6 + Math.sin(t * 30) * 0.4 : 0.05));
-    this.mesh.body.rotation.z = this.state === 'stunned' ? 1.2 : (this.state === 'landing' ? 0.15 : this.state === 'laying' ? -0.35 : 0);
+    this.mesh.body.rotation.z = this.state === 'stuck' ? 0.6 + Math.sin(t * 25) * 0.25 : this.state === 'stunned' ? 1.2 : (this.state === 'landing' ? 0.15 : this.state === 'laying' ? -0.35 : 0);
     this.mesh.body.position.y = flying ? Math.sin(t * 9) * 0.02 : 0;
     // age shows as a fading ring
     this.mesh.ring.material.opacity = 1 - 0.6 * sat(this.age / this.lifespan); this.mesh.ring.material.transparent = true;
@@ -813,9 +849,10 @@ function matchmaker(sim) {
     sim.log(fem, `chose ${nameOf(best.id)} to court her: kinship ${bk.toFixed(3)}, the least related of ${males.length} free male${males.length > 1 ? 's' : ''}.`);
   }
 }
-function broodOn(fruit) { let c = 0; for (const b of sim.brood) if (b.fruit === fruit) c++; return c; }
+function broodOn(fruit) { let c = 0; for (const b of sim.brood) if (b.fruit === fruit && b.stage !== 'pupa') c++; return c; } // pupae sit beside the fruit
 function layEggs(f, fruit, sim) {
-  const room = Math.max(0, FRUIT_CAP - broodOn(fruit)), n = Math.min(f.eggs, room);
+  const room = fruit.flesh < 0.15 ? 0 : Math.max(0, FRUIT_CAP - broodOn(fruit)), n = Math.min(f.eggs, room);
+  if (f.eggs > n) sim.deaths['egg found no room'] = (sim.deaths['egg found no room'] || 0) + f.eggs - n;
   for (let i = 0; i < n; i++) {
     sim.brood.push({ mother: f.id, father: f.fatherId, fruit, stage: 'egg', t: 0, laidAt: sim.t, slot: sim.broodSlot++,
       dev: (EGG_DAYS + LARVA_DAYS + PUPA_DAYS) * DAY * (0.9 + 0.2 * grand()) });
@@ -835,7 +872,7 @@ function stepBrood(dt, sim) {
   if (hatched.length) {
     sim.brood = sim.brood.filter(b => !b.done);
     for (const b of hatched) {
-      if (sim.flies.length >= MAX_ADULTS) { sim.lostToCrowding++; continue; }
+      if (sim.flies.length >= MAX_ADULTS) { sim.lostToCrowding++; sim.deaths['no room to emerge'] = (sim.deaths['no room to emerge'] || 0) + 1; continue; }
       eclose(b, sim);
     }
   }
@@ -868,6 +905,9 @@ function eclose(b, sim) {
 function die(f, cause, sim) {
   if (f.dead) return;
   f.dead = true; f.breakMating(sim);
+  if (f.flower && f.flower.occupant === f) f.flower.occupant = null;
+  if (f.web) { f.web.prey = null; f.web = null; }
+  sim.deaths[cause] = (sim.deaths[cause] || 0) + 1;
   f.rec.died = sim.t; f.rec.diedWall = new Date(); f.rec.cause = cause; pedVersion++;
   sim.log(f, `died of ${cause} at ${(f.age / DAY).toFixed(1)} days old, leaving ${f.rec.kids.length} offspring.`, 'death');
 }
@@ -884,9 +924,9 @@ function spawnWild(sim, sex) {
 
 // ---------- simulation ----------
 const sim = {
-  t: 0, flies: [], threats: [], brood: [], broodSlot: 0, paused: true, speed: 3, wildN: 0, lostToCrowding: 0, started: null, samples: [], ended: false,
+  t: 0, deaths: {}, flies: [], threats: [], brood: [], broodSlot: 0, paused: true, speed: 3, wildN: 0, lostToCrowding: 0, started: null, samples: [], ended: false,
   logs: [],
-  log(fly, msg, kind) { this.logs.unshift({ t: this.t, id: fly.id, name: fly.name + SEX[fly.sex], color: fly.accent, msg, kind }); if (this.logs.length > 80) this.logs.pop(); logDirty = true; },
+  log(fly, msg, kind) { this.logs.unshift({ t: this.t, id: fly.id, name: fly.name + (SEX[fly.sex] || ''), color: fly.accent, msg, kind }); if (this.logs.length > 80) this.logs.pop(); logDirty = true; },
 };
 let logDirty = true, pedVersion = 0, sel = null;
 window.__sim = sim; // handy for poking at the simulation from the browser console
@@ -895,7 +935,8 @@ const FOUNDERS = [['A', 'F', '#f2b544', 11, -1.6, 0.6], ['B', 'M', '#62cbd8', 29
 function initSim() {
   for (const f of sim.flies) f.dispose();
   for (const th of sim.threats) scene.remove(th.mesh);
-  Object.assign(sim, { t: 0, flies: [], threats: [], brood: [], broodSlot: 0, wildN: 0, lostToCrowding: 0, samples: [], logs: [], ended: false, started: new Date() });
+  Object.assign(sim, { t: 0, flies: [], threats: [], brood: [], broodSlot: 0, wildN: 0, lostToCrowding: 0, samples: [], logs: [], ended: false, started: new Date(), deaths: {} });
+  Object.assign(env, { rain: 0, rainLeft: 0, nextRain: DAY * (3 + 3 * grand()), night: 0, nextBird: DAY * 1.2 }); initWebs();
   ped.clear(); kinMemo = new Map(); nextId = 1; for (const k in genCount) delete genCount[k]; pedVersion++;
   for (const k in display) delete display[k];
   for (const [name, sex, hex, seed, x, z] of FOUNDERS) {
@@ -905,23 +946,27 @@ function initSim() {
     const fly = new Fly(rec, x, z, grand() * 6.28); fly.age = DAY * MATURE_DAYS; fly.refract = 0;
     sim.flies.push(fly);
   }
-  for (const f of flowers) f.nectar = 1;
+  for (const f of flowers) { f.nectar = 1; f.flesh = 1; f.occupant = null; }
   sim.log(sim.flies[0], 'is a founder with B♂ and C♀: three unrelated flies, each with its own genes. Keep their bloodline going.');
   select(sim.flies[0]);
   paintOdor();
 }
 
-function spawnThreat(fly) {
+function spawnThreat(fly, predator = false) {
   if (!fly || sim.threats.some(t => t.target === fly)) return;
   const a = Math.random() * Math.PI * 2, dist = 9;
   const lead = 1.2, tx = fly.x + Math.cos(fly.th) * lead * (fly.state === 'flying' ? 2.5 : 0), tz = fly.z + Math.sin(fly.th) * lead * (fly.state === 'flying' ? 2.5 : 0);
   const sx = tx + Math.cos(a) * dist, sz = tz + Math.sin(a) * dist, sy = fly.y + 2.5;
-  const ty = fly.y, len = Math.hypot(tx - sx, ty - sy, tz - sz), sp = 10;
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.6, 18, 12), threatMat); mesh.castShadow = true; scene.add(mesh);
-  sim.threats.push({ target: fly, x: sx, y: sy, z: sz, vx: (tx - sx) / len * sp, vy: (ty - sy) / len * sp, vz: (tz - sz) / len * sp, life: 2.2, mesh, prevAng: null, done: false });
+  const ty = fly.y, len = Math.hypot(tx - sx, ty - sy, tz - sz), sp = predator ? 13 : 10;
+  const mesh = predator ? buildBird() : new THREE.Mesh(new THREE.SphereGeometry(0.6, 18, 12), threatMat); mesh.castShadow = true; scene.add(mesh);
+  if (predator) mesh.rotation.y = -Math.atan2(tz - sz, tx - sx);
+  sim.threats.push({ predator, target: fly, x: sx, y: sy, z: sz, vx: (tx - sx) / len * sp, vy: (ty - sy) / len * sp, vz: (tz - sz) / len * sp, life: 2.2, mesh, prevAng: null, done: false });
 }
 function stepThreats(dt) {
-  for (const th of sim.threats) { th.x += th.vx * dt; th.y += th.vy * dt; th.z += th.vz * dt; th.life -= dt; th.mesh.position.set(th.x, Math.max(0.6, th.y), th.z); }
+  for (const th of sim.threats) { th.x += th.vx * dt; th.y += th.vy * dt; th.z += th.vz * dt; th.life -= dt; th.mesh.position.set(th.x, Math.max(0.6, th.y), th.z);
+    // a bird chases its prey until the prey's escape jump throws it off
+    if (th.predator && !th.done && !th.lost && !th.target.dead) { const dx = th.target.x - th.x, dy = th.target.y - th.y, dz = th.target.z - th.z, d = Math.hypot(dx, dy, dz) || 1; th.vx += (dx / d * 13 - th.vx) * Math.min(1, 4 * dt); th.vy += (dy / d * 13 - th.vy) * Math.min(1, 4 * dt); th.vz += (dz / d * 13 - th.vz) * Math.min(1, 4 * dt); th.mesh.rotation.y = -Math.atan2(th.vz, th.vx); }
+    if (th.predator) for (const w of th.mesh.userData.wings) w.pv.rotation.x = w.sd * Math.sin(sim.t * 18) * 0.7; }
   sim.threats = sim.threats.filter(th => { if (th.life <= 0 || th.target.dead) { scene.remove(th.mesh); return false; } return true; });
 }
 
@@ -947,6 +992,164 @@ function renderBrood(t) {
   }
   for (const k in broodMeshes) { broodMeshes[k].count = cnt[k]; broodMeshes[k].instanceMatrix.needsUpdate = true; }
 }
+
+
+// ---------- environment: day and night, rainstorms, birds, spider webs, scarce food ----------
+// Everything here is a way to die, so survival depends on genes (escape threshold, speed, lifespan)
+// and on winning the competition for nectar.
+const FOOD = { famine: 0.007, lean: 0.014, plenty: 0.022 }; // clover nectar refill per second
+const env = { rain: 0, rainLeft: 0, nextRain: DAY * 4, night: 0, nextBird: DAY * 1.2, webs: [] };
+const envOn = (id) => { const e = document.getElementById(id); return !e || e.checked; };
+function nightness() { // 1 in deep night, 0 in daytime, smooth at dusk and dawn
+  const h = ((sim.t / DAY) % 1) * 24;
+  return h < 5 ? 1 : h < 7 ? 1 - (h - 5) / 2 : h < 19 ? 0 : h < 21 ? (h - 19) / 2 : 1;
+}
+// flying is costly in the cold night and in the rain, and slower
+env.flyCost = () => 1 + 0.7 * env.night + 1.6 * env.rain;
+env.speedMul = () => 1 - 0.3 * env.night - 0.25 * env.rain;
+
+// --- sky and light follow the weather
+const SKY = { day: new THREE.Color('#a9d2ee'), rain: new THREE.Color('#7b8791'), night: new THREE.Color('#0d1626') };
+const skyTmp = new THREE.Color();
+// --- rain: falling streaks
+const RAIN_N = 1400, rainPos = new Float32Array(RAIN_N * 6), rainSpd = new Float32Array(RAIN_N);
+for (let i = 0; i < RAIN_N; i++) { const a = Math.random() * 6.283, d = Math.sqrt(Math.random()) * 24, x = Math.cos(a) * d, z = Math.sin(a) * d, y = Math.random() * 14; rainPos.set([x, y, z, x - 0.05, y + 0.6, z], i * 6); rainSpd[i] = 14 + Math.random() * 6; }
+const rainGeo = new THREE.BufferGeometry(); rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+const rainMat = new THREE.LineBasicMaterial({ color: '#cfe0ec', transparent: true, opacity: 0 });
+const rainLines = new THREE.LineSegments(rainGeo, rainMat); rainLines.frustumCulled = false; rainLines.visible = false; scene.add(rainLines);
+function envRender(realDt) {
+  skyTmp.copy(SKY.day).lerp(SKY.rain, env.rain).lerp(SKY.night, env.night * 0.88);
+  scene.background.copy(skyTmp); scene.fog.color.copy(skyTmp);
+  hemi.intensity = 0.85 * (1 - 0.62 * env.night) * (1 - 0.3 * env.rain);
+  sun.intensity = 0.95 * (1 - 0.85 * env.night) * (1 - 0.65 * env.rain);
+  rainLines.visible = env.rain > 0.02; rainMat.opacity = 0.55 * env.rain;
+  if (rainLines.visible) {
+    const fall = Math.min(0.05, realDt) * (sim.paused ? 0 : 1);
+    for (let i = 0; i < RAIN_N; i++) {
+      const o = i * 6; let y = rainPos[o + 1] - rainSpd[i] * fall;
+      if (y < 0) y += 14;
+      rainPos[o + 1] = y; rainPos[o + 4] = y + 0.6;
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+  }
+}
+
+// --- birds: a predator swoops at a fly in daylight. Only a fast Giant Fiber escape saves it.
+const birdMat = new THREE.MeshStandardMaterial({ color: '#2a2622', roughness: .8 }), birdWingMat = new THREE.MeshStandardMaterial({ color: '#3b342e', roughness: .8, side: THREE.DoubleSide });
+function buildBird() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8), birdMat); body.scale.set(1.8, 0.8, 0.8); body.castShadow = true; g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), birdMat); head.position.x = 0.62; head.position.y = 0.1; g.add(head);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.25, 6), new THREE.MeshStandardMaterial({ color: '#d9a43a' })); beak.rotation.z = -Math.PI / 2; beak.position.set(0.86, 0.08, 0); g.add(beak);
+  const wings = [];
+  for (const sd of [-1, 1]) { const pv = new THREE.Group(); pv.position.set(0, 0.1, sd * 0.2); const w = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.2), birdWingMat); w.rotation.x = Math.PI / 2; w.position.z = sd * 0.6; pv.add(w); g.add(pv); wings.push({ pv, sd }); }
+  g.userData.wings = wings; return g;
+}
+function birdStep(dt) {
+  if (!envOn('birds') || env.night > 0.5 || env.rain > 0.5) return; // birds hunt by day, not in a storm
+  env.nextBird -= dt;
+  if (env.nextBird > 0) return;
+  env.nextBird = DAY * (0.4 + 0.8 * grand());
+  const prey = sim.flies.filter(f => f.adult && (f.state === 'flying' || f.state === 'feeding' || f.state === 'laying'));
+  if (prey.length) spawnThreat(prey[Math.floor(grand() * prey.length)], true);
+}
+
+// --- spiders: invisible webs strung between plants at flying height
+const webMat = new THREE.LineBasicMaterial({ color: '#f4f4f0', transparent: true, opacity: 0.55 });
+function buildWebGeo(R) {
+  const p = [], spokes = 12;
+  for (let i = 0; i < spokes; i++) { const a = i / spokes * 6.283; p.push(0, 0, 0, Math.cos(a) * R, Math.sin(a) * R, 0); }
+  for (let ring = 1; ring <= 5; ring++) { const r = R * ring / 5.3; for (let i = 0; i < spokes; i++) { const a = i / spokes * 6.283, b = (i + 1) / spokes * 6.283; p.push(Math.cos(a) * r, Math.sin(a) * r, 0, Math.cos(b) * r, Math.sin(b) * r, 0); } }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); return g;
+}
+const spiderMat = new THREE.MeshStandardMaterial({ color: '#1c1714', roughness: .6 });
+function placeWeb(w) {
+  const clovers = flowers.filter(f => f.type === 'clover'), c = clovers[Math.floor(grand() * clovers.length)];
+  const a = grand() * 6.283, off = 1.4 + grand() * 1.2;
+  w.c.set(c.x + Math.cos(a) * off, 2.25, c.z + Math.sin(a) * off);
+  w.ang = grand() * Math.PI; w.n.set(Math.cos(w.ang), 0, Math.sin(w.ang));
+  w.group.position.copy(w.c); w.group.rotation.y = -w.ang + Math.PI / 2;
+  w.prey = null; w.relocate = 0;
+}
+function initWebs() {
+  for (const w of env.webs) scene.remove(w.group);
+  env.webs = [];
+  for (let i = 0; i < 3; i++) {
+    const group = new THREE.Group(), R = 1.05;
+    group.add(new THREE.LineSegments(buildWebGeo(R), webMat));
+    const spider = new THREE.Group();
+    const sb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), spiderMat); sb.scale.set(1, 1, 1.3); spider.add(sb);
+    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), spiderMat); sh.position.y = 0.13; spider.add(sh);
+    for (let k = 0; k < 8; k++) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.3, 4), spiderMat); const a = (k % 4 - 1.5) * 0.45, sd = k < 4 ? -1 : 1; l.position.set(sd * 0.15, 0.05 + a * 0.15, 0); l.rotation.z = sd * (1.1 + a * 0.3); spider.add(l); }
+    spider.position.set(0, R * 0.92, 0.02); group.add(spider);
+    scene.add(group);
+    const w = { group, spider, R, c: new THREE.Vector3(), n: new THREE.Vector3(), ang: 0, prey: null, relocate: 0 };
+    placeWeb(w); env.webs.push(w);
+  }
+}
+// called after a flying fly moves: did it fly through a web?
+function webCheck(f, px, py, pz) {
+  if (!envOn('spiders')) return false;
+  for (const w of env.webs) {
+    if (w.prey) continue;
+    const d0 = (px - w.c.x) * w.n.x + (pz - w.c.z) * w.n.z, d1 = (f.x - w.c.x) * w.n.x + (f.z - w.c.z) * w.n.z;
+    if (Math.sign(d0) === Math.sign(d1) && Math.abs(d1) > 0.04) continue;
+    const ix = f.x - w.n.x * d1, iz = f.z - w.n.z * d1, r = Math.hypot(ix - w.c.x, f.y - w.c.y, iz - w.c.z);
+    if (r > w.R) continue;
+    if (grand() < 0.5) continue; // about half the time the fly spots the silk and swerves
+    f.breakMating(sim); f.state = 'stuck'; f.timer = 0; f.web = w; w.prey = f; f.x = ix; f.z = iz; f.flower = null;
+    sim.log(f, 'flew into a spider web and is stuck. It struggles to tear free.', 'danger');
+    return true;
+  }
+  return false;
+}
+function webStep(dt) {
+  for (const w of env.webs) {
+    w.group.visible = envOn('spiders');
+    if (w.prey && (w.prey.dead || w.prey.web !== w)) w.prey = null;
+    // the spider walks to its prey, or back to its corner
+    const target = w.prey ? new THREE.Vector3(w.prey.x, w.prey.y, w.prey.z).sub(w.c).applyAxisAngle(new THREE.Vector3(0, 1, 0), w.ang - Math.PI / 2) : new THREE.Vector3(0, w.R * 0.92, 0.02);
+    target.z = 0.02; w.spider.position.lerp(target, Math.min(1, dt * (w.prey ? 0.5 : 0.3)));
+    if (w.relocate > 0) { w.relocate -= dt; if (w.relocate <= 0) placeWeb(w); }
+  }
+}
+
+// --- larvae eat the fruit; an eaten-out fruit starves the larvae on it, then slowly rots back
+const LARVA_EAT = 0.0018, FRUIT_REGROW = 0.0038;
+function fruitStep(dt) {
+  const larvaeOn = new Map();
+  for (const b of sim.brood) if (b.stage === 'larva') larvaeOn.set(b.fruit, (larvaeOn.get(b.fruit) || 0) + 1);
+  for (const f of flowers) {
+    if (f.type !== 'fruit') continue;
+    const n = larvaeOn.get(f) || 0;
+    f.flesh = clamp(f.flesh - n * LARVA_EAT * dt + FRUIT_REGROW * dt, 0, 1);
+    if (f.flesh <= 0.01 && n) {
+      // not enough food for all of them: larvae starve one by one
+      for (const b of sim.brood) if (b.fruit === f && b.stage === 'larva' && !b.done && grand() < 0.12 * dt) { b.done = true; b.starved = true; }
+    }
+  }
+  const starved = sim.brood.filter(b => b.starved);
+  if (starved.length) {
+    sim.brood = sim.brood.filter(b => !b.starved);
+    sim.deaths['larva starved'] = (sim.deaths['larva starved'] || 0) + starved.length;
+    if (sim.t - (env.lastLarvaLog || -1e9) > DAY) { env.lastLarvaLog = sim.t; const m = ped.get(starved[0].mother); if (m) sim.log({ id: m.id, name: m.name, sex: m.sex, accent: m.color }, `lost larvae to starvation: the fruit they hatched in is eaten bare.`, 'death'); }
+  }
+}
+function fruitRender() { for (const f of flowers) if (f.type === 'fruit' && f.fruitMesh) { const s = 0.45 + 0.55 * f.flesh; f.fruitMesh.scale.set(s, 0.75 * s, s); f.fruitMesh.position.y = 0.36 * s; } }
+
+function envStep(dt) {
+  const weather = envOn('weather');
+  env.night = weather ? nightness() : 0;
+  // rainstorms come every few days and last most of a day
+  if (weather) {
+    env.nextRain -= dt;
+    if (env.nextRain <= 0 && env.rainLeft <= 0) { env.rainLeft = DAY * (0.35 + 0.7 * grand()); env.nextRain = DAY * (4 + 5 * grand()); sim.log(stormLogger, 'A rainstorm rolls in. Flying is exhausting and the rain can knock flies down.', 'weather'); }
+    env.rainLeft -= dt;
+    env.rain = clamp(env.rain + (env.rainLeft > 0 ? 1 : -1) * dt / (DAY * 0.08), 0, 1);
+  } else { env.rain = Math.max(0, env.rain - dt); env.rainLeft = 0; }
+  birdStep(dt); webStep(dt); fruitStep(dt);
+}
+const stormLogger = { id: 0, name: 'Weather', sex: '', accent: '#9fb5c9' };
 
 // ---------- side panel ----------
 const cardsEl = document.getElementById('cards');
@@ -1034,7 +1237,7 @@ function drawBrain(fly) {
 }
 
 const fmt = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
-const STATE_LABEL = { flying: 'flying', landing: 'landing', feeding: 'feeding', escape: 'escape jump', stunned: 'stunned', mating: 'mating', laying: 'laying eggs' };
+const STATE_LABEL = { stuck: 'stuck in a web', flying: 'flying', landing: 'landing', feeding: 'feeding', escape: 'escape jump', stunned: 'stunned', mating: 'mating', laying: 'laying eggs' };
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // fly-time clock: Day N hh:mm, plus the real wall-clock time it happened
 function flyTime(t) { const d = Math.floor(t / DAY), m = Math.floor((t / DAY - d) * 1440); return `day ${d + 1} ${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
@@ -1080,7 +1283,9 @@ function updatePanel() {
     logDirty = false;
     $('log').innerHTML = sim.logs.slice(0, 18).map(l => `<div class="k-${l.kind || ''}"><b style="color:${l.color}">${flyTime(l.t)} ${esc(l.name)}</b> ${esc(l.msg)}</div>`).join('');
   }
-  $('clock').textContent = flyTime(sim.t);
+  $('clock').textContent = `${env.rain > 0.5 ? '🌧' : env.night > 0.5 ? '🌙' : '☀'} ${flyTime(sim.t)}`;
+  const D = Object.entries(sim.deaths).sort((a, b) => b[1] - a[1]);
+  $('deathStats').textContent = D.length ? 'Deaths so far: ' + D.map(([k, v]) => `${k} ${v}`).join(' · ') : 'No deaths yet.';
   for (const id of ['cpName', 'pipName']) { const e = $(id); if (sel) { e.textContent = sel.name + SEX[sel.sex]; e.style.background = sel.accent; } }
 }
 function broodCounts() { const c = { egg: 0, larva: 0, pupa: 0 }; for (const b of sim.brood) c[b.stage]++; return c; }
@@ -1680,7 +1885,7 @@ function resize() { const w = stage.clientWidth, h = stage.clientHeight; rendere
 new ResizeObserver(resize).observe(stage); resize();
 
 // browsers restore form controls on reload; start every load from the same clean state
-$('cam').value = 'orbit'; followZoom = false; $('wild').checked = true;
+$('cam').value = 'orbit'; followZoom = false; $('wild').checked = true; $('food').value = 'lean'; for (const id of ['birds', 'spiders', 'weather']) $(id).checked = true;
 initSim();
 let last = performance.now(), panelT = 0, odorT = 0, mmT = 0, sampleT = 0, wildT = 0, treeT = 0;
 const camTarget = new THREE.Vector3();
@@ -1693,38 +1898,43 @@ function endOfLine() {
   $('startBtn').lastChild.textContent = 'New family';
   $('gate').classList.remove('out');
 }
+// one simulation step (no drawing); returns true when the family line has ended
+function tick(dt) {
+  sim.t += dt; stepThreats(dt); envStep(dt); stepBrood(dt, sim);
+  for (const f of sim.flies) {
+    f.step(dt, sim);
+    // safety net: a fly whose state went non-finite would vanish from the scene, so put it back
+    if (!Number.isFinite(f.x + f.y + f.z + f.th + f.energy)) f.reset(0, 0, 0);
+  }
+  if (sim.flies.some(f => f.dead)) {
+    for (const f of sim.flies) if (f.dead) { f.dispose(); delete display[f.id]; }
+    sim.flies = sim.flies.filter(f => !f.dead);
+    if (sel && sel.dead) select(sim.flies.slice().sort((a, b) => b.id - a.id)[0] || null);
+  }
+  for (const fl of flowers) if (fl.type === 'clover') fl.nectar = Math.min(1, fl.nectar + FOOD[$('food').value] * dt);
+  mmT += dt; if (mmT > 0.5) { mmT = 0; matchmaker(sim); }
+  sampleT += dt; if (sampleT > DAY / 4) { sampleT = 0; sample(); }
+  // now and then an unrelated wild fly arrives, bringing fresh genes
+  wildT += dt;
+  // a crashing population draws in outsiders more often (rescue by immigration)
+  if (wildT > DAY * (sim.flies.length < 4 ? 5 : WILD_EVERY_DAYS)) { wildT = 0; if ($('wild').checked && (sim.flies.length || sim.brood.length) && sim.flies.length < MAX_ADULTS) { const m = sim.flies.filter(f => f.sex === 'M').length; spawnWild(sim, m * 2 < sim.flies.length ? 'M' : 'F'); } }
+  if (!sim.flies.length && !sim.brood.length && !sim.ended) { endOfLine(); return true; }
+  return false;
+}
+window.__tick = tick; window.__init = initSim; window.__env = env; // let tests run the world fast from the console
 function frame(now) {
   // the first rAF timestamp can be earlier than `last` (taken at script start): never step backwards
   const real = clamp((now - last) / 1000, 0, 0.05); last = Math.max(last, now);
   if (!sim.paused && real > 0) {
     const steps = Math.max(1, Math.round(sim.speed * real / (1 / 60)));
     const dt = sim.speed * real / steps;
-    for (let i = 0; i < steps; i++) {
-      sim.t += dt; stepThreats(dt); stepBrood(dt, sim);
-      for (const f of sim.flies) {
-        f.step(dt, sim);
-        // safety net: a fly whose state went non-finite would vanish from the scene, so put it back
-        if (!Number.isFinite(f.x + f.y + f.z + f.th + f.energy)) f.reset(0, 0, 0);
-      }
-      if (sim.flies.some(f => f.dead)) {
-        for (const f of sim.flies) if (f.dead) { f.dispose(); delete display[f.id]; }
-        sim.flies = sim.flies.filter(f => !f.dead);
-        if (sel && sel.dead) select(sim.flies.slice().sort((a, b) => b.id - a.id)[0] || null);
-      }
-      for (const fl of flowers) if (fl.type === 'clover') fl.nectar = Math.min(1, fl.nectar + 0.02 * dt);
-      mmT += dt; if (mmT > 0.5) { mmT = 0; matchmaker(sim); }
-      sampleT += dt; if (sampleT > DAY / 4) { sampleT = 0; sample(); }
-      // now and then an unrelated wild fly arrives, bringing fresh genes
-      wildT += dt;
-      if (wildT > DAY * WILD_EVERY_DAYS) { wildT = 0; if ($('wild').checked && sim.flies.length && sim.flies.length < MAX_ADULTS) { const m = sim.flies.filter(f => f.sex === 'M').length; spawnWild(sim, m * 2 < sim.flies.length ? 'M' : 'F'); } }
-      if (!sim.flies.length && !sim.brood.length && !sim.ended) { endOfLine(); break; }
-    }
+    for (let i = 0; i < steps; i++) if (tick(dt)) break;
     odorT += real;
     if (odorT > 2 && odorPlane.visible) { odorT = 0; paintOdor(); }
   }
   for (const fl of flowers) if (fl.type === 'clover') fl.headMat.color.copy(fl.baseColor).lerp(new THREE.Color('#8a6a52'), 1 - fl.nectar);
   for (const f of sim.flies) { f.render(now / 1000); f.mesh.ring.rotation.z += 0.02; }
-  renderBrood(now / 1000);
+  renderBrood(now / 1000); envRender(real); fruitRender();
   if ($('cam').value !== 'orbit' && sel) {
     // keep the fly at the centre: slide the orbit pivot onto the fly and carry the camera with it,
     // so drag-to-orbit and scroll-zoom still work around the fly
