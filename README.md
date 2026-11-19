@@ -2,7 +2,9 @@
 
 A three.js garden where two fruit flies forage among flowers, each driven by the same small simulated brain. The brain is modelled on real *Drosophila* circuits, and a live viewer shows real brain-region meshes from [Virtual Fly Brain](https://www.virtualflybrain.org/) lighting up as the selected fly's neurons fire.
 
-Open `index.html` in a browser. Everything is in that one file, including the mesh data; only three.js loads from a CDN.
+**Play it:** https://tattooinmtl.github.io/omni-lifesim/
+
+Or open `index.html` in a browser. Everything is in that one file, including the mesh data; only three.js loads from a CDN.
 
 ## What's in the brain
 
