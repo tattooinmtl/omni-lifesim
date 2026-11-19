@@ -1,0 +1,1755 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fly Brain Garden: Generations</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen lab bench. Live 3D garden on the left, an instrument rack of two fly brains on the right. Single committed dark-instrument look. */
+:root{
+  --bench:#0d1714;        /* rack background */
+  --panel:#13211c;        /* card surface */
+  --line:#24382f;         /* hairlines */
+  --ink:#dbe7e0;          /* primary text */
+  --muted:#8aa398;        /* secondary text */
+  --flyA:#f2b544;         /* fly A accent */
+  --flyB:#62cbd8;         /* fly B accent */
+  --good:#7fd17a; --bad:#ef6b5b;
+  --f-display:"Space Grotesk", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+html,body{height:100%}
+body{background:var(--bench);color:var(--ink);font-family:var(--f-body);font-size:13px;line-height:1.45}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 392px;height:100%}
+#stage{position:relative;min-height:0;background:#9cc7e8;overflow:hidden}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+/* start gate: the sim loads paused behind a dim scrim with one big call to action */
+.gate{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:radial-gradient(ellipse at center, rgba(8,16,13,.35), rgba(8,16,13,.72));backdrop-filter:blur(2px);transition:opacity .35s ease}
+.gate.out{opacity:0;pointer-events:none}
+.gate-card{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;max-width:420px}
+.gate-kicker{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.gate-title{font-family:var(--f-display);font-weight:700;font-size:clamp(24px,4vw,34px);line-height:1.1;color:#fff;text-shadow:0 2px 18px rgba(0,0,0,.4)}
+.gate-sub{color:var(--ink);opacity:.85;font-size:14px;max-width:34ch}
+.start-btn{position:relative;display:inline-flex;align-items:center;gap:12px;margin-top:6px;padding:14px 30px 14px 22px;border:0;border-radius:999px;cursor:pointer;
+  font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.02em;color:#10130f;
+  background:linear-gradient(110deg,var(--flyA),#f7d27e 45%,var(--flyB));
+  box-shadow:0 10px 30px rgba(0,0,0,.35),0 0 0 0 rgba(242,181,68,.55),inset 0 1px 0 rgba(255,255,255,.55);
+  transition:transform .15s ease, box-shadow .2s ease;animation:startPulse 2.2s ease-out infinite}
+.start-btn:hover{transform:translateY(-2px) scale(1.03);box-shadow:0 14px 36px rgba(0,0,0,.4),0 0 0 6px rgba(242,181,68,.18),inset 0 1px 0 rgba(255,255,255,.6)}
+.start-btn:active{transform:translateY(0) scale(.98)}
+.start-btn:focus-visible{outline:3px solid #fff;outline-offset:4px}
+.start-btn .tri{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#10130f;color:var(--flyA)}
+.start-btn .tri svg{margin-left:3px}
+@keyframes startPulse{0%{box-shadow:0 10px 30px rgba(0,0,0,.35),0 0 0 0 rgba(242,181,68,.5),inset 0 1px 0 rgba(255,255,255,.55)}70%{box-shadow:0 10px 30px rgba(0,0,0,.35),0 0 0 18px rgba(242,181,68,0),inset 0 1px 0 rgba(255,255,255,.55)}100%{box-shadow:0 10px 30px rgba(0,0,0,.35),0 0 0 0 rgba(242,181,68,0),inset 0 1px 0 rgba(255,255,255,.55)}}
+@media (prefers-reduced-motion: reduce){.start-btn{animation:none}.gate{transition:none}}
+.hud{position:absolute;left:max(12px, env(safe-area-inset-left,0px));top:12px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.hud .tag{pointer-events:auto;background:rgba(13,23,20,.78);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:6px 10px;font-family:var(--f-mono);font-size:11.5px;color:var(--ink)}
+.hint{position:absolute;left:max(12px, env(safe-area-inset-left,0px));bottom:12px;background:rgba(13,23,20,.72);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--ink);pointer-events:none}
+.rack{overflow-y:auto;border-left:1px solid var(--line);padding-block:16px 28px;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+h1{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.lede{color:var(--muted);margin:4px 0 0;max-width:60ch}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.card.a{box-shadow:inset 3px 0 0 var(--flyA)} .card.b{box-shadow:inset 3px 0 0 var(--flyB)}
+.card-head{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.card-head h2{font-family:var(--f-display);font-size:15px;margin:0;font-weight:700}
+.chip{font-family:var(--f-mono);font-size:11px;padding:2px 8px;border-radius:99px;background:#1d3029;color:var(--ink);white-space:nowrap}
+.chip.feeding{background:#22402a;color:var(--good)} .chip.stunned{background:#4a2420;color:#ffb3a8} .chip.escape{background:#433a18;color:#ffe08a} .chip.tasting{background:#3d2433;color:#f5b3d8}
+.meter{display:grid;grid-template-columns:64px 1fr 40px;align-items:center;gap:8px;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.bar{height:6px;border-radius:3px;background:#0b1411;overflow:hidden}
+.bar>i{display:block;height:100%;width:50%}
+.brain{width:100%;height:auto;aspect-ratio:340/236;display:block;background:#0b1411;border-radius:6px}
+.prefs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pref{background:#0b1411;border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+.pref span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.pref b{font-family:var(--f-mono);font-weight:500;font-size:13px;font-variant-numeric:tabular-nums}
+.counts{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.lesions{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line);padding-top:8px}
+.lesions label{display:flex;gap:8px;align-items:flex-start;font-size:12px;cursor:pointer}
+.lesions input{margin-top:2px;accent-color:var(--bad)}
+.lesions small{color:var(--muted)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+button,select{font-family:var(--f-body);font-size:12px;background:#1d3029;color:var(--ink);border:1px solid #2f4a40;border-radius:6px;padding:6px 10px;cursor:pointer}
+button:hover{background:#253d34} button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--flyB);outline-offset:2px}
+button.threat-a{border-color:var(--flyA)} button.threat-b{border-color:var(--flyB)}
+.ctl label{display:flex;gap:6px;align-items:center;font-size:12px}
+.log{font-family:var(--f-mono);font-size:11px;display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto}
+.log div{color:var(--muted)} .log div b{font-weight:500}
+.sec-title{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0}
+details{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+details summary{cursor:pointer;font-family:var(--f-display);font-weight:500}
+details p,details li{color:var(--muted);max-width:62ch}
+details ul{padding-left:18px;margin:6px 0}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.pip{position:absolute;right:max(12px, env(safe-area-inset-right,0px));bottom:12px;width:min(340px,46%);background:rgba(10,18,15,.9);border:1px solid rgba(255,255,255,.1);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.pip-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08)}
+.pip-head b{font-family:var(--f-display);font-size:12.5px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pip-head button{padding:3px 8px;font-size:11px}
+.pip-head button[aria-pressed="true"].pa{background:var(--flyA);color:#1a1405;border-color:var(--flyA)}
+.pip-head button[aria-pressed="true"].pb{background:var(--flyB);color:#05181b;border-color:var(--flyB)}
+#brainView{position:relative;aspect-ratio:16/10;cursor:grab}
+#brainView canvas{display:block;width:100%;height:100%}
+#brainTip{position:absolute;left:8px;bottom:6px;font-family:var(--f-mono);font-size:10.5px;color:var(--ink);pointer-events:none;text-shadow:0 1px 2px #000}
+.pip-src{font-size:10px;color:var(--muted);padding:4px 8px 6px;font-family:var(--f-mono)}
+.pip.min #brainView,.pip.min .pip-src,.pip.min #circuitView{display:none}
+/* second window: the 3D circuit, docked top-right */
+.pip.pip-top{top:12px;bottom:auto;width:min(380px,48%)}
+#cpMode{padding:2px 4px;font-size:11px;max-width:112px;background:#13211c;color:var(--ink);border:1px solid var(--line);border-radius:4px}
+.pip.pip-top.big{top:12px;left:12px;right:12px;bottom:12px;width:auto;z-index:15}
+.pip.pip-top.big #circuitView{aspect-ratio:auto;flex:1;min-height:0}
+#circuitView{position:relative;aspect-ratio:16/11;cursor:grab;background:radial-gradient(ellipse at center,#0f1f1a,#070d0b)}
+#circuitView canvas{display:block;width:100%;height:100%}
+#circuitTip{position:absolute;left:8px;bottom:6px;right:8px;font-family:var(--f-mono);font-size:10.5px;color:var(--ink);pointer-events:none;text-shadow:0 1px 2px #000}
+/* generations */
+[hidden]{display:none!important}
+.h1sub{font-size:13px;font-weight:500;color:var(--muted);margin-left:6px;letter-spacing:.04em;text-transform:uppercase}
+.lede a{color:var(--flyB)}
+.tagbtn{cursor:pointer;color:var(--ink)} .tagbtn:hover{background:rgba(30,50,42,.9)}
+.pname{font-family:var(--f-mono);font-size:11px;color:#10130f;background:var(--flyA);border-radius:4px;padding:2px 7px;white-space:nowrap}
+.pip-head b{flex:1}
+.card.sel{box-shadow:inset 3px 0 0 var(--sel,var(--flyA))}
+.sel-meta{font-size:11.5px;color:var(--muted)}
+.tree-btn{border-color:var(--flyB)}
+.poplist{display:flex;flex-wrap:wrap;gap:5px}
+.pchip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px 3px 6px;font-family:var(--f-mono);font-size:11px;border-radius:99px;background:#0b1411;border:1px solid #24382f}
+.pchip i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.pchip small{color:var(--muted);font-size:10px}
+.pchip.on{border-color:var(--c);background:#16271f}
+.genes{display:flex;flex-direction:column;gap:3px;border-top:1px solid var(--line);padding-top:8px}
+.gene{display:grid;grid-template-columns:minmax(0,1fr) 70px 34px;gap:8px;align-items:center;font-size:11px;color:var(--muted)}
+.gene span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gene b{font-family:var(--f-mono);font-weight:500;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+.log .k-birth b::after{content:" ✦";color:var(--good)} .log .k-death{opacity:.8} .log .k-egg b::after{content:" ●";color:#f5efdc} .log .k-mate b::after{content:" ♥";color:#f5a3c7}
+.treeModal{position:absolute;inset:12px;z-index:18;background:rgba(9,16,13,.96);border:1px solid rgba(255,255,255,.1);border-radius:10px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.45)}
+.tm-head{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.08);flex-wrap:wrap}
+.tm-head b{font-family:var(--f-display);font-size:15px}
+.tm-tabs{display:flex;gap:4px}
+.tm-tabs button{padding:3px 10px;font-size:12px}
+.tm-tabs button[aria-pressed="true"]{background:var(--flyB);color:#05181b;border-color:var(--flyB)}
+.tm-meta{flex:1;font-family:var(--f-mono);font-size:11px;color:var(--muted);min-width:0}
+.tm-scroll{flex:1;overflow:auto;min-height:0}
+.tm-time{flex:1;min-height:0;position:relative} .tm-time canvas{position:absolute;inset:0;width:100%;height:100%}
+.tm-info{border-top:1px solid rgba(255,255,255,.08);padding:8px 12px;font-size:12px;color:var(--muted);min-height:58px}
+.tm-info b{font-weight:600}
+#tmTree svg{display:block}
+#tmTree .grid{stroke:rgba(255,255,255,.04)} #tmTree .grid.major{stroke:rgba(255,255,255,.1)}
+#tmTree .axis{fill:#8aa398;font:10px "IBM Plex Mono",monospace}
+#tmTree .band{fill:rgba(255,255,255,.015)} #tmTree .band.odd{fill:rgba(255,255,255,.04)}
+#tmTree .glabel{fill:#c9d6cf;font:600 11px "IBM Plex Sans",sans-serif}
+#tmTree .link{fill:none;stroke:rgba(201,214,207,.22);stroke-width:1.2} #tmTree .link.lf{stroke-dasharray:3 3}
+#tmTree .fnode{cursor:pointer} #tmTree .fnode .life{stroke-width:4;stroke-linecap:round;opacity:.45}
+#tmTree .fnode.alive .life{opacity:.9}
+#tmTree .fnode circle{stroke:#0b1411;stroke-width:1.5} #tmTree .fnode.wild circle{stroke:#fff;stroke-dasharray:2 2}
+#tmTree .fnode.sel circle{stroke:#fff;stroke-width:2.5}
+#tmTree .nm{fill:#c9d6cf;font:10px "IBM Plex Mono",monospace} #tmTree .dagger{fill:#8aa398;font:11px sans-serif}
+#tmTree.hl .fnode{opacity:.25} #tmTree.hl .fnode.on,#tmTree.hl .fnode.anc{opacity:1} #tmTree.hl .link{opacity:.15} #tmTree.hl .link.on{opacity:1;stroke:#f5efdc}
+#tmTree .fnode.on circle{stroke:#fff;stroke-width:2.5}
+@media (max-width:900px){
+  .tm-meta{order:5;flex-basis:100%}
+  .treeModal{inset:6px}
+  .pip{width:min(230px,58%)}
+  .hint{display:none}
+  .app{grid-template-columns:1fr;height:auto}
+  #stage{height:62svh}
+  .rack{border-left:0;border-top:1px solid var(--line);overflow:visible}
+}
+@media (prefers-reduced-motion:reduce){ *{scroll-behavior:auto} }
+</style>
+
+<div class="app">
+  <div id="stage">
+    <div class="hud">
+      <div class="tag" id="clock">t = 0 s</div>
+      <div class="tag" id="popTag">3 adults</div>
+      <button class="tag tagbtn" id="treeBtn2" type="button">Family tree</button>
+    </div>
+    <div class="gate" id="gate">
+      <div class="gate-card">
+        <div class="gate-kicker">Three founders · one family</div>
+        <div class="gate-title">Start a bloodline</div>
+        <div class="gate-sub">A♀, B♂ and C♀ are unrelated. They must eat, court, and lay eggs in rotting fruit so the next generation can grow. Every egg carries a mix of both parents' genes.</div>
+        <button class="start-btn" id="startBtn" type="button"><span class="tri"><svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M0 0 L14 8 L0 16 Z" fill="currentColor"/></svg></span>Start</button>
+      </div>
+    </div>
+    <div class="hint">Left-click a fly to select it and swoop a shadow at it. Right-click a fly to select and follow it, right-click the ground to stop. Drag to orbit, scroll to zoom.</div>
+    <div class="treeModal" id="treeModal" hidden>
+      <div class="tm-head">
+        <b>Generations</b>
+        <div class="tm-tabs" role="group" aria-label="View"><button data-tab="tree" aria-pressed="true">Family tree</button><button data-tab="time" aria-pressed="false">Timeline</button></div>
+        <span class="tm-meta" id="tmMeta"></span>
+        <button id="tmClose" aria-label="Close generations window">✕</button>
+      </div>
+      <div class="tm-scroll" id="tmTree"></div>
+      <div class="tm-time" id="tmTimeWrap" hidden><canvas id="tmTime"></canvas></div>
+      <div class="tm-info" id="tmInfo">Each bar is one fly's life, from the day it emerged (dot) to its death (†). Lines run from the mother (solid) and father (dashed) at the moment the egg was laid. Hover a fly for its story; click a living fly to select it.</div>
+    </div>
+    <div class="pip pip-top" id="cpip">
+      <div class="pip-head">
+        <b>Brain circuit 3D</b>
+        <span class="pname" id="cpName">A♀</span>
+        <select id="cpMode" aria-label="What to show" title="What to show"><option value="both" selected>Real + wiring</option><option value="real">Real neurons</option><option value="model">Model wiring</option></select>
+        <button id="cpBig" aria-label="Enlarge circuit view" title="Enlarge">⤢</button>
+        <button id="cpMin" aria-label="Collapse circuit view">–</button>
+      </div>
+      <div id="circuitView"><span id="circuitTip">Drag to turn. Point at a neuron to name it.</span></div>
+      <div class="pip-src">Neurons: 78 real FlyWire skeletons via Virtual Fly Brain · activity: the model</div>
+    </div>
+    <div class="pip" id="pip">
+      <div class="pip-head">
+        <b>Real fly brain</b>
+        <span class="pname" id="pipName">A♀</span>
+        <button id="pipMin" aria-label="Collapse brain view">–</button>
+      </div>
+      <div id="brainView"><span id="brainTip">Drag to turn. Point at a region to name it.</span></div>
+      <div class="pip-src">Meshes: Virtual Fly Brain, JRC2018Unisex template</div>
+    </div>
+  </div>
+
+  <aside class="rack">
+    <header>
+      <h1>Fly Brain Garden <span class="h1sub">Generations</span></h1>
+      <p class="lede">Three unrelated founders, each with its own genes and brain wiring. Females mate, then lay eggs in rotting fruit. Eggs become larvae, then pupae, then adults about 9 fly-days later. Flies age and die. Females choose the least related male they can find, to keep the family tree mixed. <a href="../">Back to the two-fly garden</a>.</p>
+    </header>
+
+    <div class="card ctl">
+      <div class="row">
+        <button id="pause">Start</button>
+        <select id="speed" aria-label="Simulation speed"><option value="1">1× speed</option><option value="3" selected>3× speed</option><option value="8">8× speed</option><option value="20">20× speed</option></select>
+        <select id="cam" aria-label="Camera"><option value="orbit">Free camera</option><option value="sel">Follow selected fly</option></select>
+        <button id="reset">Restart</button>
+      </div>
+      <div class="row">
+        <button class="threat-a" id="thS">Loom at selected</button>
+        <label><input type="checkbox" id="odormap"> Odor map</label>
+      </div>
+      <div class="legend"><span><i style="background:#ffc83c"></i>Ethyl acetate (clover, lily, fruit)</span><span><i style="background:#aa6eff"></i>Floral terpene (lily)</span><span><i style="background:#5ac85a"></i>Geosmin (rotting fruit)</span></div>
+    </div>
+
+    <div class="card pop">
+      <div class="card-head"><h2>Population</h2><button class="tree-btn" id="treeBtn" type="button">Family tree &amp; timeline</button></div>
+      <div class="counts" id="popStats"></div>
+      <div class="poplist" id="popList"></div>
+      <div class="row"><label title="Every 14 fly-days an unrelated fly arrives from outside"><input type="checkbox" id="wild" checked> Wild flies arrive now and then</label><button id="wildNow" type="button">Add a wild fly now</button></div>
+    </div>
+
+    <div id="cards"></div>
+
+    <div class="card">
+      <p class="sec-title">What happened</p>
+      <div class="log" id="log"></div>
+    </div>
+
+    <details>
+      <summary>How generations work</summary>
+      <ul>
+        <li><b>Time</b>: one fly day lasts 20 seconds at 1× speed. Egg 1 day, larva 4 days, pupa 4 days, so an egg becomes an adult in about 9 days, as in real <i>Drosophila</i> at 25 °C. Adults live about 40 days.</li>
+        <li><b>Genes</b>: every fly carries two copies of each gene, one from each parent: sensitivity of each smell receptor, learning rate, escape threshold, flight speed, lifespan, eggs per clutch, and body colour. Its Kenyon-cell wiring is inherited too. Each copy has a 5% chance to mutate. Learned memories are not inherited.</li>
+        <li><b>Mating</b>: a mature, receptive female picks the least related free male (by kinship from the family tree). After mating she carries a clutch of eggs and, like a real fly after sex peptide, rejects males for 1.5 days.</li>
+        <li><b>Eggs</b>: she flies to rotting fruit and lays them. Each fruit holds 6 young at most, and the garden holds 20 adults; clover nectar is the only real food, so a crowded garden goes hungry.</li>
+        <li><b>Inbreeding</b>: children of relatives have a higher inbreeding coefficient, which shortens their life and shrinks their clutches.</li>
+        <li><b>Death</b>: old age, or two days with an empty stomach.</li>
+      </ul>
+    </details>
+    <details>
+      <summary>How the brain works, and what's real</summary>
+      <p>Each fly runs about 60 rate neurons named after real <i>Drosophila</i> cell types, wired in the textbook layout:</p>
+      <ul>
+        <li><b>Antennae</b>: olfactory receptor neurons on the left and right (Or42b for esters, Or56a for geosmin) feed projection neurons.</li>
+        <li><b>Lateral horn</b>: innate valence. Esters attract, geosmin repels.</li>
+        <li><b>Mushroom body</b>: 30 Kenyon cells keep a sparse code of the current smell. Sugar fires PAM dopamine neurons, bitter or a hit fires PPL1. Dopamine weakens the Kenyon-cell synapses onto the matching output neuron, which is how real flies learn smells.</li>
+        <li><b>Vision</b>: LPLC2 looming detectors drive the Giant Fiber, which triggers a fast escape jump. LC10 spots the other fly.</li>
+        <li><b>Descending neurons</b> turn left or right, fly forward, land, and extend the proboscis to feed.</li>
+      </ul>
+      <p>The brain view in the corner uses real anatomy: the JRC2018Unisex template brain and 13 of its neuropil regions, downloaded from Virtual Fly Brain and simplified to fit the page. Each region glows with the simulated neurons that live there: antennal lobes with each antenna, lateral horn with innate valence, mushroom body calyx and lobes with Kenyon cells, optic lobes with the looming and fly detectors, and the gnathal ganglia with taste and feeding. Dopamine shows on the mushroom-body lobes, PAM in green on the horizontal lobes and PPL1 in red on the vertical lobes, matching where those neurons project in real flies.</p>
+      <p>The wiring is still a teaching-scale circuit, not the full connectome. The real FlyWire brain has about 140,000 neurons.</p>
+    </details>
+  </aside>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="neuron-data.js"></script>
+<script src="brain-data.js"></script>
+<script>
+(() => {
+// ---------- utilities ----------
+const mulberry = (seed) => { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+const sat = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const gauss = (r) => { let u = 0, v = 0; while (!u) u = r(); while (!v) v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const wrapAngle = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+
+const WORLD_R = 19, SIGMA = 4.5, KC_N = 30, KC_K = 5;
+const EMIT = { clover: [1, 0, 0], lily: [0.8, 1, 0], fruit: [0.6, 0, 1.25] };
+const FLOWER_NAME = { clover: 'clover', lily: 'lily', fruit: 'rotting fruit' };
+
+// ---------- three.js scene ----------
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#a9d2ee');
+scene.fog = new THREE.Fog('#a9d2ee', 30, 70);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+camera.position.set(0, 18, 26);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, 0); controls.maxPolarAngle = Math.PI * 0.48; controls.minDistance = 3; controls.maxDistance = 60; controls.enableDamping = true;
+
+scene.add(new THREE.HemisphereLight('#dff0ff', '#4f6e2c', 0.85));
+const sun = new THREE.DirectionalLight('#fff3dc', 0.95);
+sun.position.set(14, 24, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(1536, 1536);
+Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 70 });
+scene.add(sun);
+
+const ground = new THREE.Mesh(new THREE.CircleGeometry(34, 72), new THREE.MeshStandardMaterial({ color: '#6c9846', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+// grass
+{
+  const r = mulberry(7), n = 2600;
+  const g = new THREE.ConeGeometry(0.05, 0.55, 3); g.translate(0, 0.27, 0);
+  const grass = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 }), n);
+  const m = new THREE.Object3D(), c = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * 30;
+    m.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+    m.rotation.set((r() - .5) * .5, r() * 6, (r() - .5) * .5);
+    const s = 0.6 + r() * 1.1; m.scale.set(s, s * (0.7 + r()), s); m.updateMatrix();
+    grass.setMatrixAt(i, m.matrix);
+    c.setHSL(0.24 + r() * 0.06, 0.45 + r() * 0.2, 0.28 + r() * 0.14); grass.setColorAt(i, c);
+  }
+  scene.add(grass);
+}
+
+// flowers
+const flowers = [];
+function buildFlowers() {
+  const r = mulberry(42);
+  const types = [...Array(9).fill('clover'), ...Array(6).fill('lily'), ...Array(3).fill('fruit')];
+  for (const type of types) {
+    let x, z, ok, tries = 0;
+    do { const a = r() * Math.PI * 2, d = 3 + Math.sqrt(r()) * 14.5; x = Math.cos(a) * d; z = Math.sin(a) * d; ok = flowers.every(f => Math.hypot(f.x - x, f.z - z) > 4.2); } while (!ok && ++tries < 200);
+    const grp = new THREE.Group(); grp.position.set(x, 0, z);
+    let top, headMat = null;
+    if (type === 'fruit') {
+      const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 14), new THREE.MeshStandardMaterial({ color: '#6e4a26', roughness: .9 }));
+      fruit.scale.set(1, 0.75, 1); fruit.position.y = 0.36; fruit.castShadow = true; grp.add(fruit);
+      const moldMat = new THREE.MeshStandardMaterial({ color: '#9fb08c', roughness: 1 });
+      for (let i = 0; i < 9; i++) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.08 + r() * 0.06, 8, 6), moldMat); const a = r() * 6.28, b = r() * 1.2; s.position.set(Math.cos(a) * Math.sin(b) * .48, .36 + Math.cos(b) * .36, Math.sin(a) * Math.sin(b) * .48); grp.add(s); }
+      top = 0.75;
+    } else {
+      const h = type === 'lily' ? 1.6 + r() * 0.4 : 1.0 + r() * 0.35;
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, h, 6), new THREE.MeshStandardMaterial({ color: '#3f7a2e' }));
+      stem.position.y = h / 2; stem.castShadow = true; grp.add(stem);
+      const leafMat = new THREE.MeshStandardMaterial({ color: '#4c8f36', side: THREE.DoubleSide });
+      for (let i = 0; i < 3; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 6), leafMat); l.scale.set(1, 0.12, 0.55); const a = i * 2.1 + r(); l.position.set(Math.cos(a) * .2, 0.15 + i * 0.12, Math.sin(a) * .2); l.rotation.y = -a; grp.add(l); }
+      if (type === 'clover') {
+        const geo = new THREE.IcosahedronGeometry(0.28, 1);
+        const p = geo.attributes.position; for (let i = 0; i < p.count; i++) { const k = 1 + (r() - .5) * 0.25; p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 1.15, p.getZ(i) * k); }
+        geo.computeVertexNormals();
+        headMat = new THREE.MeshStandardMaterial({ color: '#e9a3c9', flatShading: true, roughness: .8 });
+        const head = new THREE.Mesh(geo, headMat); head.position.y = h + 0.18; head.castShadow = true; grp.add(head);
+        top = h + 0.45;
+      } else {
+        const petalMat = new THREE.MeshStandardMaterial({ color: '#f6dbe9', roughness: .6, side: THREE.DoubleSide });
+        headMat = petalMat;
+        for (let i = 0; i < 6; i++) {
+          const pv = new THREE.Group(); pv.position.y = h; pv.rotation.y = i * Math.PI / 3;
+          const pet = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 8), petalMat); pet.scale.set(0.9, 0.06, 0.26); pet.position.x = 0.38; pet.rotation.z = 0.55; pet.castShadow = true;
+          pv.add(pet); grp.add(pv);
+        }
+        const stamMat = new THREE.MeshStandardMaterial({ color: '#d9822b' });
+        for (let i = 0; i < 6; i++) { const st = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4), stamMat); const a = i * 1.047; st.position.set(Math.cos(a) * .13, h + 0.32, Math.sin(a) * .13); grp.add(st); }
+        top = h + 0.3;
+      }
+    }
+    scene.add(grp);
+    flowers.push({ type, x, z, top, nectar: 1, headMat, baseColor: headMat ? headMat.color.clone() : null });
+  }
+}
+buildFlowers();
+
+function odorAt(x, z, out) {
+  out[0] = out[1] = out[2] = 0;
+  for (const f of flowers) {
+    const d2 = (f.x - x) ** 2 + (f.z - z) ** 2;
+    const k = Math.exp(-d2 / (2 * SIGMA * SIGMA)) * (f.type === 'fruit' ? 1 : 0.35 + 0.65 * f.nectar);
+    const e = EMIT[f.type]; out[0] += e[0] * k; out[1] += e[1] * k; out[2] += e[2] * k;
+  }
+  return out;
+}
+
+// odor map overlay
+const ODOR_RES = 128;
+const odorCanvas = document.createElement('canvas'); odorCanvas.width = odorCanvas.height = ODOR_RES;
+const odorTex = new THREE.CanvasTexture(odorCanvas);
+const odorPlane = new THREE.Mesh(new THREE.PlaneGeometry(44, 44), new THREE.MeshBasicMaterial({ map: odorTex, transparent: true, depthWrite: false }));
+odorPlane.rotation.x = -Math.PI / 2; odorPlane.position.y = 0.04; odorPlane.visible = false; scene.add(odorPlane);
+function paintOdor() {
+  const ctx = odorCanvas.getContext('2d'), img = ctx.createImageData(ODOR_RES, ODOR_RES), o = [0, 0, 0];
+  for (let j = 0; j < ODOR_RES; j++) for (let i = 0; i < ODOR_RES; i++) {
+    const x = (i / ODOR_RES - .5) * 44, z = (j / ODOR_RES - .5) * 44; odorAt(x, z, o);
+    const t = o[0] + o[1] + o[2] + 1e-6, idx = (j * ODOR_RES + i) * 4;
+    img.data[idx] = (255 * o[0] + 170 * o[1] + 90 * o[2]) / t;
+    img.data[idx + 1] = (200 * o[0] + 110 * o[1] + 200 * o[2]) / t;
+    img.data[idx + 2] = (60 * o[0] + 255 * o[1] + 90 * o[2]) / t;
+    img.data[idx + 3] = Math.min(1, t) * 150;
+  }
+  ctx.putImageData(img, 0, 0); odorTex.needsUpdate = true;
+}
+
+// ---------- life cycle & genetics constants ----------
+// One fly day = DAY sim-seconds. Durations follow real Drosophila at 25 °C, compressed:
+// egg ~1 day, larva ~4 days, pupa ~4 days (egg to adult ~9-10 days), adult life ~40 days.
+const DAY = 20;
+const EGG_DAYS = 1, LARVA_DAYS = 4, PUPA_DAYS = 4, LIFE_DAYS = 40, MATURE_DAYS = 0.5, REFRACT_DAYS = 1.5;
+const MAX_ADULTS = 20, FRUIT_CAP = 6, WILD_EVERY_DAYS = 14;
+const GENES = {
+  ornE: ['Ester smell (Or42b)', 0.5, 1.5, 1], ornT: ['Terpene smell', 0.5, 1.5, 1], ornG: ['Geosmin smell (Or56a)', 0.5, 1.5, 1],
+  learn: ['Learning rate (dopamine)', 0.4, 1.8, 1], gfThr: ['Escape threshold (Giant Fiber)', 0.25, 0.85, 0.5],
+  speed: ['Flight speed', 0.7, 1.35, 1], life: ['Lifespan', 0.7, 1.3, 1], fec: ['Eggs per clutch', 0.6, 1.6, 1],
+  hueR: ['Colour R', 0.15, 1, 0.5], hueG: ['Colour G', 0.15, 1, 0.5], hueB: ['Colour B', 0.15, 1, 0.5],
+};
+const TRAITS = ['ornE', 'ornT', 'ornG', 'learn', 'gfThr', 'speed', 'life', 'fec'];
+const grand = mulberry((Date.now() & 0xffffff) ^ 0x5eed); // world randomness (mating, sex, mutation)
+const hexOf = (r, g, b) => '#' + [r, g, b].map(v => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('');
+function hexToRGB(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
+
+// diploid genome: every gene has two alleles (one from each parent). The fly expresses their average.
+function founderGenome(r, hex) {
+  const g = {}, rgb = hexToRGB(hex);
+  for (const k in GENES) {
+    const [, lo, hi, base] = GENES[k];
+    const centre = k === 'hueR' ? rgb[0] : k === 'hueG' ? rgb[1] : k === 'hueB' ? rgb[2] : base;
+    const spread = k.startsWith('hue') ? 0.04 : (hi - lo) * 0.12;
+    g[k] = [clamp(centre + gauss(r) * spread, lo, hi), clamp(centre + gauss(r) * spread, lo, hi)];
+  }
+  return g;
+}
+const MUT_P = 0.05;
+function childGenome(mg, fg, r) {
+  const g = {}; let muts = 0;
+  for (const k in GENES) {
+    const [, lo, hi] = GENES[k];
+    const a = [mg[k][r() < 0.5 ? 0 : 1], fg[k][r() < 0.5 ? 0 : 1]]; // one allele from mum, one from dad
+    for (let i = 0; i < 2; i++) if (r() < MUT_P) { a[i] = clamp(a[i] + gauss(r) * (hi - lo) * 0.1, lo, hi); muts++; }
+    g[k] = a;
+  }
+  return { g, muts };
+}
+// Kenyon-cell wiring is inherited too: each KC's input pattern comes from mum or dad, with rare rewiring
+function childWiring(mw, fw, r) {
+  const fresh = makeWiring(r);
+  return mw.map((row, i) => r() < 0.02 ? fresh[i] : (r() < 0.5 ? row : fw[i]).slice());
+}
+const express = (g) => { const p = {}; for (const k in g) p[k] = (g[k][0] + g[k][1]) / 2; return p; };
+
+// ---------- pedigree: every fly that ever lived ----------
+const ped = new Map(); let nextId = 1; const genCount = {}; let kinMemo = new Map();
+// kinship coefficient (probability that an allele picked from each is identical by descent)
+function kin(a, b) {
+  if (a == null || b == null) return 0;
+  if (a === b) return 0.5 * (1 + inbreeding(a));
+  const key = a < b ? a + '|' + b : b + '|' + a;
+  const m = kinMemo.get(key); if (m !== undefined) return m;
+  const young = ped.get(Math.max(a, b)), old = Math.min(a, b); // ids grow with birth order
+  const v = young.mother == null ? 0 : 0.5 * (kin(young.mother, old) + kin(young.father, old));
+  kinMemo.set(key, v); return v;
+}
+function inbreeding(id) { const r = ped.get(id); return r && r.mother != null ? kin(r.mother, r.father) : 0; }
+const SEX = { F: '♀', M: '♂' };
+const nameOf = (id) => { const r = ped.get(id); return r ? r.name + SEX[r.sex] : '?'; };
+
+// ---------- fly body ----------
+const FG = {
+  thorax: new THREE.SphereGeometry(0.18, 16, 12), abd: new THREE.SphereGeometry(0.17, 16, 12), seg: [0, 1, 2].map(i => new THREE.TorusGeometry(0.13 - i * 0.02, 0.022, 6, 16)),
+  head: new THREE.SphereGeometry(0.12, 14, 10), eye: new THREE.SphereGeometry(0.085, 14, 10), leg: new THREE.CylinderGeometry(0.012, 0.01, 0.32, 4), wing: new THREE.CircleGeometry(0.26, 16),
+  ring: new THREE.TorusGeometry(0.22, 0.03, 6, 24),
+};
+const FM = {
+  thorax: new THREE.MeshStandardMaterial({ color: '#5a4632', roughness: .55 }), abdF: new THREE.MeshStandardMaterial({ color: '#8a6a3e', roughness: .55 }), abdM: new THREE.MeshStandardMaterial({ color: '#6a4e2c', roughness: .55 }),
+  seg: new THREE.MeshStandardMaterial({ color: '#3a2a1a', roughness: .55 }), segM: new THREE.MeshStandardMaterial({ color: '#1e140b', roughness: .55 }),
+  head: new THREE.MeshStandardMaterial({ color: '#4a3826', roughness: .55 }), eye: new THREE.MeshStandardMaterial({ color: '#b3261e', emissive: '#3a0705', roughness: .55 }),
+  leg: new THREE.MeshStandardMaterial({ color: '#2a2018' }), wing: new THREE.MeshStandardMaterial({ color: '#dcecff', transparent: true, opacity: .45, side: THREE.DoubleSide, roughness: .2 }),
+};
+function buildFlyMesh(accent, label, sex) {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const mk = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; return m; };
+  const thorax = mk(FG.thorax, FM.thorax); thorax.scale.set(1.1, .9, 1); body.add(thorax);
+  // females are a little bigger; males have a dark abdomen tip, as in real Drosophila
+  const abd = mk(FG.abd, sex === 'F' ? FM.abdF : FM.abdM); abd.scale.set(sex === 'F' ? 1.6 : 1.35, .8, .95); abd.position.x = -0.3; body.add(abd);
+  for (let i = 0; i < 3; i++) { const s = mk(FG.seg[i], sex === 'M' && i > 0 ? FM.segM : FM.seg); s.rotation.y = Math.PI / 2; s.position.x = -0.24 - i * 0.1; body.add(s); }
+  const head = mk(FG.head, FM.head); head.position.x = 0.23; body.add(head);
+  for (const sd of [-1, 1]) { const e = mk(FG.eye, FM.eye); e.position.set(0.27, 0.03, sd * 0.085); body.add(e); }
+  for (let i = 0; i < 3; i++) for (const sd of [-1, 1]) { const l = new THREE.Mesh(FG.leg, FM.leg); l.position.set(0.08 - i * 0.1, -0.15, sd * 0.13); l.rotation.x = sd * 0.6; body.add(l); }
+  const wings = [];
+  for (const sd of [-1, 1]) {
+    const pv = new THREE.Group(); pv.position.set(0.02, 0.13, sd * 0.05);
+    const w = new THREE.Mesh(FG.wing, FM.wing); w.scale.set(1.25, 0.45, 1); w.rotation.x = -Math.PI / 2; w.position.set(-0.2, 0, sd * 0.13);
+    pv.add(w); body.add(pv); wings.push({ pv, sd });
+  }
+  const ringMat = new THREE.MeshBasicMaterial({ color: accent });
+  const ring = new THREE.Mesh(FG.ring, ringMat); ring.rotation.x = Math.PI / 2; ring.position.y = 0.6; g.add(ring);
+  g.scale.setScalar(2.3);
+  // floating name pin: constant on-screen size, drawn on top so every fly is findable
+  const lc = document.createElement('canvas'); lc.width = 96; lc.height = 64;
+  const lx = lc.getContext('2d'), text = label + SEX[sex];
+  lx.font = 'bold 21px "Space Grotesk", system-ui, sans-serif';
+  const w = Math.max(40, lx.measureText(text).width + 16);
+  lx.fillStyle = accent; lx.beginPath(); lx.roundRect ? lx.roundRect(48 - w / 2, 6, w, 34, 17) : lx.rect(48 - w / 2, 6, w, 34); lx.fill();
+  lx.beginPath(); lx.moveTo(40, 38); lx.lineTo(56, 38); lx.lineTo(48, 58); lx.closePath(); lx.fill();
+  lx.fillStyle = '#10130f'; lx.textAlign = 'center'; lx.textBaseline = 'middle'; lx.fillText(text, 48, 24);
+  const tex = new THREE.CanvasTexture(lc);
+  const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false }));
+  marker.scale.set(0.045, 0.03, 1); marker.center.set(0.5, 0); marker.position.y = 0.5; marker.renderOrder = 10;
+  g.add(marker);
+  return { group: g, body, wings, ring, own: [ringMat, marker.material, tex] };
+}
+
+// ---------- brain ----------
+function makeWiring(r) {
+  const w = [];
+  for (let i = 0; i < KC_N; i++) {
+    const a = [0, 0, 0], ch = [0, 1, 2];
+    for (let j = 2; j > 0; j--) { const k = Math.floor(r() * (j + 1)); [ch[j], ch[k]] = [ch[k], ch[j]]; }
+    const n = r() < 0.3 ? 1 : 2;
+    for (let j = 0; j < n; j++) a[ch[j]] = 0.5 + 0.5 * r();
+    w.push(a);
+  }
+  return w;
+}
+const kcScratch = new Float32Array(KC_N), kcSorted = new Float32Array(KC_N);
+function kcEncode(pn, wiring, out) {
+  let mx = 0;
+  for (let i = 0; i < KC_N; i++) { const w = wiring[i]; kcScratch[i] = w[0] * pn[0] + w[1] * pn[1] + w[2] * pn[2]; if (kcScratch[i] > mx) mx = kcScratch[i]; }
+  kcSorted.set(kcScratch); kcSorted.sort(); const thr = kcSorted[KC_N - 1 - KC_K];
+  for (let i = 0; i < KC_N; i++) out[i] = mx < 0.12 ? 0 : sat((kcScratch[i] - thr) / 0.22);
+  return out;
+}
+function ornResp(c) { return 1 - Math.exp(-1.6 * c); }
+function pnFromOrn(oE, oT, oG, out) {
+  const tot = oE + oT + oG, d = 0.12 + tot * 0.9;
+  out[0] = sat(oE / d); out[1] = sat(oT / d); out[2] = sat(oG / d); return out;
+}
+
+class Fly {
+  constructor(rec, x, z, heading) {
+    this.rec = rec; this.id = rec.id; this.name = rec.name; this.sex = rec.sex; this.accent = rec.color;
+    this.wiring = rec.wiring; this.ph = express(rec.genome); this.rand = mulberry(rec.id * 7919 + 13);
+    this.F = rec.F;
+    this.lesion = { or56a: false, learn: false, gf: false };
+    this.mesh = buildFlyMesh(this.accent, rec.name, rec.sex); scene.add(this.mesh.group);
+    this.trailN = 260; this.trailPos = new Float32Array(this.trailN * 3);
+    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(this.trailPos, 3)); tg.setDrawRange(0, 0);
+    this.trail = new THREE.Line(tg, new THREE.LineBasicMaterial({ color: this.accent, transparent: true, opacity: 0.7 })); this.trail.frustumCulled = false; this.trail.visible = false; scene.add(this.trail);
+    // inbreeding costs lifespan and fertility (inbreeding depression)
+    this.lifespan = DAY * LIFE_DAYS * this.ph.life * (1 - 0.8 * this.F) * (0.85 + 0.3 * this.rand());
+    this.age = 0; this.refract = DAY * MATURE_DAYS; this.eggs = 0; this.fatherId = null; this.mate = null; this.mateT = 0;
+    this.goalFruit = null; this.laying = false; this.starve = 0; this.dead = false;
+    this.reset(x, z, heading);
+  }
+  reset(x = 0, z = 0, heading = 0) {
+    this.x = x; this.z = z; this.y = 2.2; this.th = heading;
+    this.energy = 0.6; this.state = 'flying'; this.timer = 0; this.cool = 2; this.flower = null; this.lastFlower = null; this.lastFlowerT = 0;
+    this.ex = 0; this.vx = 0; this.vy = 0; this.vz = 0; this.shock = 0; this.gfFlash = 0;
+    this.wA = new Float32Array(KC_N).fill(0.5); this.wV = new Float32Array(KC_N).fill(0.5);
+    this.kc = new Float32Array(KC_N);
+    this.n = { eL: 0, eR: 0, tL: 0, tR: 0, gL: 0, gR: 0, sug: 0, bit: 0, lpL: 0, lpR: 0, lc10: 0, pnE: 0, pnT: 0, pnG: 0, lhA: 0, lhV: 0, hun: 0, mbA: 0, mbV: 0, pam: 0, ppl: 0, dnF: 0, dnL: 0, dnR: 0, dnLand: 0, mn: 0, gf: 0 };
+    this.counts = { sips: 0, lily: 0, fruit: 0, escapes: 0, hits: 0 };
+    this.trailCount = 0; this.trailT = 0; this.trail.geometry.setDrawRange(0, 0);
+  }
+  forward() { return [Math.cos(this.th), Math.sin(this.th)]; }
+  right() { return [-Math.sin(this.th), Math.cos(this.th)]; }
+  sense(px, pz) { const o = odorAt(px, pz, [0, 0, 0]), p = this.ph; return [ornResp(o[0] * p.ornE), ornResp(o[1] * p.ornT), this.lesion.or56a ? 0 : ornResp(o[2] * p.ornG)]; }
+  valueOf(type) {
+    const e = EMIT[type], p = this.ph, pn = pnFromOrn(ornResp(e[0] * p.ornE), ornResp(e[1] * p.ornT), this.lesion.or56a ? 0 : ornResp(e[2] * p.ornG), [0, 0, 0]);
+    const kc = kcEncode(pn, this.wiring, new Float32Array(KC_N));
+    let s = 0, a = 0, v = 0; for (let i = 0; i < KC_N; i++) { s += kc[i]; a += this.wA[i] * kc[i]; v += this.wV[i] * kc[i]; }
+    const lhA = sat(1.1 * pn[0] + 0.6 * pn[1] - 1.2 * pn[2]), lhV = sat(1.5 * pn[2]);
+    return (lhA - lhV) + 2.0 * (a - v) / (s + 0.25);
+  }
+  get adult() { return this.age >= DAY * MATURE_DAYS; }
+  // where reproduction wants this fly to go (hunger wins: a starving fly feeds first)
+  goal() {
+    if (this.energy < 0.3) return null;
+    if (this.mate && !this.mate.dead) return { x: this.mate.x, z: this.mate.z, kind: 'mate' };
+    if (this.sex === 'F' && this.eggs > 0) {
+      let best = null, bd = 1e9;
+      for (const f of flowers) if (f.type === 'fruit') { const room = FRUIT_CAP - broodOn(f), d = Math.hypot(f.x - this.x, f.z - this.z) + (room > 0 ? 0 : 30); if (d < bd) { bd = d; best = f; } }
+      this.goalFruit = best; return best ? { x: best.x, z: best.z, kind: 'lay' } : null;
+    }
+    return null;
+  }
+
+  step(dt, sim) {
+    const n = this.n, r = this.rand, p = this.ph;
+    const [fx, fz] = this.forward(), [rx, rz] = this.right();
+    this.age += dt; this.refract -= dt;
+    const hx = this.x + fx * 0.5, hz = this.z + fz * 0.5;
+    const L = this.sense(hx - rx * 0.5, hz - rz * 0.5), R = this.sense(hx + rx * 0.5, hz + rz * 0.5);
+    n.eL = L[0]; n.tL = L[1]; n.gL = L[2]; n.eR = R[0]; n.tR = R[1]; n.gR = R[2];
+    let sug = 0, bit = 0;
+    if (this.state === 'feeding' && this.flower) {
+      const f = this.flower;
+      if (f.type === 'clover') { sug = f.nectar > 0.05 ? 1 : 0.1; }
+      else if (f.type === 'lily') { sug = 0.3; bit = 1; }
+      else { sug = 0.2; bit = 0.85; }
+    }
+    n.sug = sug; n.bit = bit;
+    let lpL = 0, lpR = 0, threatDir = null;
+    const th = sim.threats.find(t => t.target === this);
+    if (th) {
+      const dx = th.x - this.x, dy = th.y - this.y, dz = th.z - this.z, d = Math.hypot(dx, dy, dz);
+      const ang = 2 * Math.atan(0.6 / Math.max(d, 0.1));
+      const dAng = th.prevAng == null ? 0 : (ang - th.prevAng) / dt; th.prevAng = ang;
+      const lp = sat(dAng / 3);
+      const side = (dx * rx + dz * rz) / Math.max(d, 1e-3);
+      if (side > 0) lpR = lp; else lpL = lp;
+      threatDir = [dx / d, dy / d, dz / d];
+      if (d < 0.75 && !th.done) {
+        th.done = true;
+        if (this.state !== 'escape') { this.breakMating(sim); this.state = 'stunned'; this.timer = 2.5; this.shock = 0.9; this.energy = Math.max(0, this.energy - 0.05); this.counts.hits++; sim.log(this, `got hit by the shadow. PPL1 dopamine fires and punishes whatever it smells right now.`); this.flower = null; }
+      }
+    }
+    n.lpL = lpL; n.lpR = lpR;
+    // LC10: the nearest other fly in front
+    let lc = 0, lcSide = 0, od = 3;
+    for (const o of sim.flies) {
+      if (o === this) continue;
+      const dx = o.x - this.x, dz = o.z - this.z, d = Math.hypot(dx, dz);
+      if (d < od && d > 1e-3) { const front = (dx * fx + dz * fz) / d; if (front > 0) { od = d; lc = sat((1 - d / 3) * front * 1.5); lcSide = Math.sign(dx * rx + dz * rz); } }
+    }
+    n.lc10 = lc;
+
+    const oE = (n.eL + n.eR) / 2, oT = (n.tL + n.tR) / 2, oG = (n.gL + n.gR) / 2;
+    const pn = pnFromOrn(oE, oT, oG, [0, 0, 0]); n.pnE = pn[0]; n.pnT = pn[1]; n.pnG = pn[2];
+    n.lhA = sat(1.1 * pn[0] + 0.6 * pn[1] - 1.2 * pn[2]); n.lhV = sat(1.5 * pn[2]);
+    kcEncode(pn, this.wiring, this.kc);
+    let ks = 0, ma = 0, mv = 0; for (let i = 0; i < KC_N; i++) { ks += this.kc[i]; ma += this.wA[i] * this.kc[i]; mv += this.wV[i] * this.kc[i]; }
+    n.mbA = sat(ma / (ks + 0.25) * 1.6); n.mbV = sat(mv / (ks + 0.25) * 1.6);
+    n.hun = 1 - this.energy;
+    this.shock = Math.max(0, this.shock - dt);
+    n.pam = sat(sug * (1 - bit)); n.ppl = sat(bit + (this.shock > 0 ? 1 : 0));
+    if (!this.lesion.learn) {
+      const lr = p.learn;
+      for (let i = 0; i < KC_N; i++) {
+        const k = this.kc[i];
+        this.wA[i] -= 3.0 * lr * k * n.ppl * dt * this.wA[i];
+        this.wV[i] -= 1.0 * lr * k * n.pam * dt * this.wV[i];
+        this.wA[i] += (0.5 - this.wA[i]) * 0.003 * dt; this.wV[i] += (0.5 - this.wV[i]) * 0.003 * dt;
+        this.wA[i] = clamp(this.wA[i], 0.02, 1); this.wV[i] = clamp(this.wV[i], 0.02, 1);
+      }
+    }
+    const V = (n.lhA - n.lhV) + 2.0 * (ma - mv) / (ks + 0.25);
+    const goal = this.state === 'flying' ? this.goal() : null;
+    const approach = goal ? 0 : V * (0.2 + n.hun);
+
+    const pL = n.eL + n.tL, pR = n.eR + n.tR;
+    const dPos = (pL - pR) / (pL + pR + 0.03), dGeo = (n.gL - n.gR) / (n.gL + n.gR + 0.03);
+    this.ex += -this.ex * dt + Math.sqrt(dt) * 1.1 * gauss(r);
+    let edge = 0; const rr = Math.hypot(this.x, this.z);
+    if (rr > WORLD_R - 2) { const want = Math.atan2(-this.z, -this.x); edge = -Math.sign(wrapAngle(want - this.th)) * clamp((rr - WORLD_R + 2) / 2, 0, 2); }
+    let turn = 2.4 * approach * dPos - 2.2 * n.lhV * dGeo + this.ex * (1 - sat(Math.abs(approach))) * 0.8 + edge + 2.5 * (lpR - lpL);
+    if (goal) turn -= 3.2 * wrapAngle(Math.atan2(goal.z - this.z, goal.x - this.x) - this.th) + this.ex * 0.6; // reproduction drive steers (positive turn = heading angle decreases)
+    else turn += 1.6 * lc * lcSide;
+    n.dnL = sat(turn); n.dnR = sat(-turn);
+    n.dnF = sat(0.4 + 0.5 * Math.abs(approach) + (goal ? 0.4 : 0));
+
+    let near = 0, best = null, bd = 1e9;
+    for (const f of flowers) { const d = Math.hypot(f.x - hx, f.z - hz); if (d < bd && !(f === this.lastFlower && sim.t - this.lastFlowerT < 9)) { bd = d; best = f; } }
+    near = best ? Math.exp(-bd * bd / 1.2) : 0;
+    n.dnLand = (this.state === 'flying' && this.cool <= 0 && !goal) ? sat(approach * 2.2 * near) : (goal && goal.kind === 'lay' ? sat(1.6 - Math.hypot(goal.x - this.x, goal.z - this.z)) : 0);
+    n.mn = this.state === 'feeding' ? sat(sug * (1 - bit)) : 0;
+
+    n.gf = this.gfFlash > 0 ? 1 : 0; this.gfFlash = Math.max(0, this.gfFlash - dt);
+    if (!this.lesion.gf && Math.max(lpL, lpR) > p.gfThr && threatDir && (this.state === 'flying' || this.state === 'feeding' || this.state === 'laying')) {
+      this.state = 'escape'; this.timer = 0.4; this.gfFlash = 0.4; n.gf = 1; this.counts.escapes++; this.laying = false;
+      const hl = Math.hypot(threatDir[0], threatDir[2]) || 1;
+      this.vx = -threatDir[0] / hl * 9; this.vz = -threatDir[2] / hl * 9; this.vy = 4;
+      this.th = Math.atan2(this.vz, this.vx); this.flower = null; this.cool = 2;
+      sim.log(this, `saw the loom. LPLC2 → Giant Fiber → escape jump.`);
+    }
+
+    this.cool -= dt;
+    const old = sat((this.age / this.lifespan - 0.75) * 4); // the last quarter of life slows a fly down
+    switch (this.state) {
+      case 'flying': {
+        this.th = wrapAngle(this.th + (n.dnR - n.dnL) * 2.6 * dt);
+        // close to a mate or the egg-laying fruit: home straight in and slow down, instead of circling it
+        let homing = 1;
+        if (goal) { const gd = Math.hypot(goal.x - this.x, goal.z - this.z); if (gd < 3.5) { this.th = wrapAngle(this.th + wrapAngle(Math.atan2(goal.z - this.z, goal.x - this.x) - this.th) * Math.min(1, 8 * dt)); homing = 0.35 + 0.65 * gd / 3.5; } }
+        const waiting = (this.mate && this.sex === 'F' ? 0.45 : 1) * homing; // a receptive female slows for her suitor
+        const sp = (1.3 + 2.3 * n.dnF) * (0.45 + 0.55 * Math.min(1, this.energy * 2 + 0.2)) * p.speed * (1 - 0.5 * old) * waiting;
+        this.x += Math.cos(this.th) * sp * dt; this.z += Math.sin(this.th) * sp * dt;
+        const alt = 2.2 + 0.35 * Math.sin(sim.t * 0.7 + this.id * 2.1);
+        this.y += (alt - this.y) * 1.5 * dt;
+        this.energy = Math.max(0, this.energy - 0.011 * dt);
+        if (goal && goal.kind === 'mate' && this.mate && Math.hypot(this.mate.x - this.x, this.mate.z - this.z) < 1.1 && this.mate.state === 'flying') startMating(this, this.mate, sim);
+        else if (goal && goal.kind === 'lay' && this.goalFruit && Math.hypot(this.goalFruit.x - this.x, this.goalFruit.z - this.z) < 1.3) { this.state = 'landing'; this.flower = this.goalFruit; this.laying = true; }
+        else if (!goal && n.dnLand > 0.45 && best && bd < 1.4) { this.state = 'landing'; this.flower = best; }
+        break;
+      }
+      case 'landing': {
+        const f = this.flower, dx = f.x - this.x, dz = f.z - this.z, d = Math.hypot(dx, dz);
+        if (d > 0.05) { this.th = Math.atan2(dz, dx); const s = Math.min(d, 2 * dt); this.x += dx / d * s; this.z += dz / d * s; }
+        this.y += (f.top - this.y) * 3 * dt;
+        if (d < 0.1 && Math.abs(this.y - f.top) < 0.08) { this.state = this.laying ? 'laying' : 'feeding'; this.timer = 0; this.y = f.top; }
+        break;
+      }
+      case 'feeding': {
+        const f = this.flower; this.timer += dt; this.energy = Math.max(0, this.energy - 0.004 * dt);
+        if (f.type === 'clover') {
+          if (sug > 0.5) { this.energy = Math.min(1, this.energy + 0.11 * dt); f.nectar = Math.max(0, f.nectar - 0.07 * dt); }
+          if (this.timer < dt * 1.5) { this.counts.sips++; if (this === sel) sim.log(this, `landed on clover and tastes sugar. PAM dopamine fires and strengthens its liking for this smell.`); }
+          if (this.energy > 0.97 || f.nectar < 0.05) this.takeoff(sim, 0);
+        } else if (this.timer > (f.type === 'lily' ? 0.6 : 0.8)) {
+          if (f.type === 'lily') this.counts.lily++; else this.counts.fruit++;
+          if (this === sel) sim.log(this, `tasted bitter on the ${FLOWER_NAME[f.type]}. PPL1 dopamine fires and weakens the approach synapses for that smell.`);
+          this.takeoff(sim, Math.PI);
+        }
+        break;
+      }
+      case 'laying': { // ovipositor on the fruit: eggs go in one by one
+        this.timer += dt; this.energy = Math.max(0, this.energy - 0.004 * dt);
+        if (this.timer > 2.5) { layEggs(this, this.flower, sim); this.laying = false; this.takeoff(sim, Math.PI); }
+        break;
+      }
+      case 'mating': {
+        this.y += (0.32 - this.y) * 3 * dt; this.timer -= dt;
+        if (this.timer <= 0) finishMating(this, sim);
+        break;
+      }
+      case 'escape': {
+        this.x += this.vx * dt; this.z += this.vz * dt; this.y += this.vy * dt;
+        this.vx *= 1 - 3 * dt; this.vz *= 1 - 3 * dt; this.vy -= 8 * dt;
+        this.timer -= dt; if (this.timer <= 0) this.state = 'flying';
+        break;
+      }
+      case 'stunned': {
+        this.y += (0.35 - this.y) * 2 * dt; this.timer -= dt;
+        if (this.timer <= 0) { this.state = 'flying'; this.cool = 3; }
+        break;
+      }
+    }
+    this.y = clamp(this.y, 0.3, 6);
+    const rr2 = Math.hypot(this.x, this.z); if (rr2 > WORLD_R + 2) { this.x *= (WORLD_R + 2) / rr2; this.z *= (WORLD_R + 2) / rr2; }
+    // a courtship that goes nowhere is dropped
+    if (this.mate && this.state === 'flying' && sim.t - this.mateT > DAY * 0.6) this.breakMating(sim);
+    // death: old age or starvation
+    if (this.energy <= 0) this.starve += dt; else this.starve = 0;
+    if (this.age > this.lifespan) die(this, 'old age', sim);
+    else if (this.starve > DAY * 2) die(this, 'starvation', sim);
+
+    this.trailT += dt;
+    if (this.trailT > 0.12) {
+      this.trailT = 0;
+      if (this.trailCount < this.trailN) this.trailCount++; else this.trailPos.copyWithin(0, 3);
+      const i = (this.trailCount - 1) * 3; this.trailPos[i] = this.x; this.trailPos[i + 1] = this.y; this.trailPos[i + 2] = this.z;
+      this.trail.geometry.attributes.position.needsUpdate = true; this.trail.geometry.setDrawRange(0, this.trailCount);
+    }
+  }
+  breakMating(sim) { const m = this.mate; if (m) { m.mate = null; if (m.state === 'mating') { m.state = 'flying'; m.cool = 2; } } this.mate = null; if (this.state === 'mating') this.state = 'flying'; }
+  takeoff(sim, turnBack) {
+    this.lastFlower = this.flower; this.lastFlowerT = sim.t; this.flower = null;
+    this.state = 'flying'; this.cool = 3; this.th = wrapAngle(this.th + turnBack + (this.rand() - .5));
+    this.y += 0.1;
+  }
+  render(t) {
+    const g = this.mesh.group; g.position.set(this.x, this.y, this.z); g.rotation.y = -this.th;
+    const flying = this.state !== 'feeding' && this.state !== 'stunned' && this.state !== 'laying' && this.state !== 'mating';
+    for (const w of this.mesh.wings) w.pv.rotation.x = w.sd * (flying ? 0.25 + Math.sin(t * 70) * 0.8 : (this.state === 'mating' && this.sex === 'M' ? 0.6 + Math.sin(t * 30) * 0.4 : 0.05));
+    this.mesh.body.rotation.z = this.state === 'stunned' ? 1.2 : (this.state === 'landing' ? 0.15 : this.state === 'laying' ? -0.35 : 0);
+    this.mesh.body.position.y = flying ? Math.sin(t * 9) * 0.02 : 0;
+    // age shows as a fading ring
+    this.mesh.ring.material.opacity = 1 - 0.6 * sat(this.age / this.lifespan); this.mesh.ring.material.transparent = true;
+  }
+  dispose() {
+    scene.remove(this.mesh.group); scene.remove(this.trail);
+    for (const o of this.mesh.own) o.dispose(); this.trail.geometry.dispose(); this.trail.material.dispose();
+  }
+}
+
+// ---------- reproduction ----------
+function startMating(a, b, sim) {
+  for (const f of [a, b]) { f.state = 'mating'; f.timer = 4; f.flower = null; f.vx = f.vz = 0; }
+  // land side by side on the grass
+  const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, ang = Math.atan2(b.z - a.z, b.x - a.x);
+  a.x = mx - Math.cos(ang) * 0.25; a.z = mz - Math.sin(ang) * 0.25; b.x = mx + Math.cos(ang) * 0.25; b.z = mz + Math.sin(ang) * 0.25;
+  a.th = ang; b.th = ang;
+}
+function finishMating(f, sim) {
+  const m = f.mate;
+  f.state = 'flying'; f.cool = 2; f.y = 0.6;
+  if (!m) return;
+  if (f.sex === 'F') {
+    // sperm stored; sex peptide in the seminal fluid makes her lay eggs and reject males for a while
+    f.fatherId = m.id; f.eggs = Math.max(1, Math.round(6 * f.ph.fec * (1 - 0.8 * f.F) * (0.8 + 0.4 * f.rand())));
+    f.refract = DAY * REFRACT_DAYS;
+    f.rec.mates.add(m.id); m.rec.mates.add(f.id);
+    sim.log(f, `mated with ${nameOf(m.id)} (kinship ${kin(f.id, m.id).toFixed(3)}). She carries ${f.eggs} eggs and now looks for rotting fruit.`, 'mate');
+  } else f.refract = DAY * 0.3;
+  f.mate = null;
+}
+// females that are ready choose the LEAST RELATED male available, to avoid inbreeding
+function matchmaker(sim) {
+  const males = sim.flies.filter(f => f.sex === 'M' && f.adult && !f.mate && f.refract <= 0 && f.energy > 0.25 && f.state === 'flying');
+  for (const fem of sim.flies) {
+    if (fem.sex !== 'F' || !fem.adult || fem.mate || fem.refract > 0 || fem.eggs > 0 || fem.energy < 0.3 || fem.state !== 'flying') continue;
+    let best = null, bk = 9, bd = 0;
+    for (const m of males) {
+      if (m.mate) continue;
+      const k = kin(fem.id, m.id), d = Math.hypot(m.x - fem.x, m.z - fem.z);
+      if (k < bk - 1e-6 || (Math.abs(k - bk) < 1e-6 && d < bd)) { best = m; bk = k; bd = d; }
+    }
+    if (!best) continue;
+    fem.mate = best; best.mate = fem; fem.mateT = best.mateT = sim.t;
+    sim.log(fem, `chose ${nameOf(best.id)} to court her: kinship ${bk.toFixed(3)}, the least related of ${males.length} free male${males.length > 1 ? 's' : ''}.`);
+  }
+}
+function broodOn(fruit) { let c = 0; for (const b of sim.brood) if (b.fruit === fruit) c++; return c; }
+function layEggs(f, fruit, sim) {
+  const room = Math.max(0, FRUIT_CAP - broodOn(fruit)), n = Math.min(f.eggs, room);
+  for (let i = 0; i < n; i++) {
+    sim.brood.push({ mother: f.id, father: f.fatherId, fruit, stage: 'egg', t: 0, laidAt: sim.t, slot: sim.broodSlot++,
+      dev: (EGG_DAYS + LARVA_DAYS + PUPA_DAYS) * DAY * (0.9 + 0.2 * grand()) });
+  }
+  f.rec.eggs += n; f.rec.clutches++;
+  sim.log(f, n ? `laid ${n} eggs in rotting fruit${n < f.eggs ? ` (${f.eggs - n} more found no room)` : ''}. Larvae will feed on the fruit.` : `found every fruit full. Her ${f.eggs} eggs are lost.`, 'egg');
+  f.eggs = 0;
+}
+function stepBrood(dt, sim) {
+  for (const b of sim.brood) {
+    b.t += dt;
+    const st = b.t < EGG_DAYS * DAY ? 'egg' : b.t < (EGG_DAYS + LARVA_DAYS) * DAY ? 'larva' : 'pupa';
+    b.stage = st;
+    if (b.t >= b.dev) b.done = true;
+  }
+  const hatched = sim.brood.filter(b => b.done);
+  if (hatched.length) {
+    sim.brood = sim.brood.filter(b => !b.done);
+    for (const b of hatched) {
+      if (sim.flies.length >= MAX_ADULTS) { sim.lostToCrowding++; continue; }
+      eclose(b, sim);
+    }
+  }
+}
+let flyAccentCache = {};
+function newRecord({ name, sex, gen, mother = null, father = null, genome, wiring, wild = false, laidAt = null }) {
+  const id = nextId++;
+  const p = express(genome);
+  const rec = { id, name, sex, gen, mother, father, genome, wiring, wild, laidAt, born: sim.t, bornWall: new Date(), died: null, diedWall: null, cause: null,
+    color: hexOf(p.hueR, p.hueG, p.hueB), F: 0, kids: [], mates: new Set(), eggs: 0, clutches: 0 };
+  ped.set(id, rec);
+  rec.F = mother != null ? kin(mother, father) : 0;
+  if (mother != null) { ped.get(mother).kids.push(id); ped.get(father).kids.push(id); }
+  pedVersion++;
+  return rec;
+}
+function eclose(b, sim) {
+  const mo = ped.get(b.mother), fa = ped.get(b.father);
+  const { g, muts } = childGenome(mo.genome, fa.genome, grand);
+  const gen = Math.max(mo.gen, fa.gen) + 1;
+  genCount[gen] = (genCount[gen] || 0) + 1;
+  const males = sim.flies.filter(f => f.sex === 'M').length, fems = sim.flies.length - males;
+  const sex = grand() < 0.5 + (fems - males) * 0.03 ? 'M' : 'F'; // 50:50, nudged slightly toward the rarer sex
+  const rec = newRecord({ name: `${gen}.${genCount[gen]}`, sex, gen, mother: b.mother, father: b.father, genome: g, wiring: childWiring(mo.wiring, fa.wiring, grand), laidAt: b.laidAt });
+  const fr = b.fruit, a = grand() * 6.28;
+  const fly = new Fly(rec, fr.x + Math.cos(a) * 0.8, fr.z + Math.sin(a) * 0.8, a); fly.y = 0.6;
+  sim.flies.push(fly);
+  sim.log(fly, `emerged from a pupa on the rotting fruit. Parents ${nameOf(b.mother)} × ${nameOf(b.father)}, inbreeding ${rec.F.toFixed(3)}${muts ? `, ${muts} new mutation${muts > 1 ? 's' : ''}` : ''}.`, 'birth');
+}
+function die(f, cause, sim) {
+  if (f.dead) return;
+  f.dead = true; f.breakMating(sim);
+  f.rec.died = sim.t; f.rec.diedWall = new Date(); f.rec.cause = cause; pedVersion++;
+  sim.log(f, `died of ${cause} at ${(f.age / DAY).toFixed(1)} days old, leaving ${f.rec.kids.length} offspring.`, 'death');
+}
+function spawnWild(sim, sex) {
+  const r = grand, hex = hexOf(0.35 + r() * 0.6, 0.35 + r() * 0.6, 0.35 + r() * 0.6);
+  sim.wildN++;
+  const rec = newRecord({ name: 'W' + sim.wildN, sex, gen: 0, genome: founderGenome(r, hex), wiring: makeWiring(r), wild: true });
+  const a = r() * 6.28, fly = new Fly(rec, Math.cos(a) * (WORLD_R - 1), Math.sin(a) * (WORLD_R - 1), a + Math.PI);
+  fly.age = DAY * MATURE_DAYS; fly.refract = 0;
+  sim.flies.push(fly);
+  sim.log(fly, `flew in from outside the garden: new, unrelated genes for the population.`, 'birth');
+  return fly;
+}
+
+// ---------- simulation ----------
+const sim = {
+  t: 0, flies: [], threats: [], brood: [], broodSlot: 0, paused: true, speed: 3, wildN: 0, lostToCrowding: 0, started: null, samples: [], ended: false,
+  logs: [],
+  log(fly, msg, kind) { this.logs.unshift({ t: this.t, id: fly.id, name: fly.name + SEX[fly.sex], color: fly.accent, msg, kind }); if (this.logs.length > 80) this.logs.pop(); logDirty = true; },
+};
+let logDirty = true, pedVersion = 0, sel = null;
+window.__sim = sim; // handy for poking at the simulation from the browser console
+const threatMat = new THREE.MeshStandardMaterial({ color: '#1b1b1b', roughness: .7 });
+const FOUNDERS = [['A', 'F', '#f2b544', 11, -1.6, 0.6], ['B', 'M', '#62cbd8', 29, 1.6, -0.6], ['C', 'F', '#c58cff', 47, 0.2, 1.8]];
+function initSim() {
+  for (const f of sim.flies) f.dispose();
+  for (const th of sim.threats) scene.remove(th.mesh);
+  Object.assign(sim, { t: 0, flies: [], threats: [], brood: [], broodSlot: 0, wildN: 0, lostToCrowding: 0, samples: [], logs: [], ended: false, started: new Date() });
+  ped.clear(); kinMemo = new Map(); nextId = 1; for (const k in genCount) delete genCount[k]; pedVersion++;
+  for (const k in display) delete display[k];
+  for (const [name, sex, hex, seed, x, z] of FOUNDERS) {
+    const r = mulberry(seed * 101 + (Date.now() & 0xffff));
+    const rec = newRecord({ name, sex, gen: 0, genome: founderGenome(r, hex), wiring: makeWiring(r) });
+    rec.color = hex; // founders keep their signature colours
+    const fly = new Fly(rec, x, z, grand() * 6.28); fly.age = DAY * MATURE_DAYS; fly.refract = 0;
+    sim.flies.push(fly);
+  }
+  for (const f of flowers) f.nectar = 1;
+  sim.log(sim.flies[0], 'is a founder with B♂ and C♀: three unrelated flies, each with its own genes. Keep their bloodline going.');
+  select(sim.flies[0]);
+  paintOdor();
+}
+
+function spawnThreat(fly) {
+  if (!fly || sim.threats.some(t => t.target === fly)) return;
+  const a = Math.random() * Math.PI * 2, dist = 9;
+  const lead = 1.2, tx = fly.x + Math.cos(fly.th) * lead * (fly.state === 'flying' ? 2.5 : 0), tz = fly.z + Math.sin(fly.th) * lead * (fly.state === 'flying' ? 2.5 : 0);
+  const sx = tx + Math.cos(a) * dist, sz = tz + Math.sin(a) * dist, sy = fly.y + 2.5;
+  const ty = fly.y, len = Math.hypot(tx - sx, ty - sy, tz - sz), sp = 10;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.6, 18, 12), threatMat); mesh.castShadow = true; scene.add(mesh);
+  sim.threats.push({ target: fly, x: sx, y: sy, z: sz, vx: (tx - sx) / len * sp, vy: (ty - sy) / len * sp, vz: (tz - sz) / len * sp, life: 2.2, mesh, prevAng: null, done: false });
+}
+function stepThreats(dt) {
+  for (const th of sim.threats) { th.x += th.vx * dt; th.y += th.vy * dt; th.z += th.vz * dt; th.life -= dt; th.mesh.position.set(th.x, Math.max(0.6, th.y), th.z); }
+  sim.threats = sim.threats.filter(th => { if (th.life <= 0 || th.target.dead) { scene.remove(th.mesh); return false; } return true; });
+}
+
+// ---------- brood on the fruit: eggs, larvae, pupae ----------
+const BROOD_MAX = 3 * FRUIT_CAP + 8;
+// rounded little body for larvae and pupae (three r128 has no working CapsuleGeometry)
+const grub = (r, len) => { const g = new THREE.SphereGeometry(r, 10, 8); g.scale(1, len / (2 * r), 1); return g; };
+const broodMeshes = {
+  egg: new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshStandardMaterial({ color: '#fbf6e6', roughness: .5 }), BROOD_MAX),
+  larva: new THREE.InstancedMesh(grub(0.06, 0.3), new THREE.MeshStandardMaterial({ color: '#efe6cf', roughness: .6 }), BROOD_MAX),
+  pupa: new THREE.InstancedMesh(grub(0.07, 0.32), new THREE.MeshStandardMaterial({ color: '#8a5a2b', roughness: .7 }), BROOD_MAX),
+};
+for (const k in broodMeshes) { broodMeshes[k].count = 0; broodMeshes[k].castShadow = true; scene.add(broodMeshes[k]); }
+const bm = new THREE.Object3D();
+function renderBrood(t) {
+  const cnt = { egg: 0, larva: 0, pupa: 0 };
+  for (const b of sim.brood) {
+    const f = b.fruit, a = b.slot * 2.399, k = b.stage; // golden-angle spread around the fruit
+    if (k === 'egg') { const r = 0.18 + (b.slot % 3) * 0.08; bm.position.set(f.x + Math.cos(a) * r, 0.7, f.z + Math.sin(a) * r); bm.rotation.set(0, a, 0.3); bm.scale.set(1, 1.5, 1); }
+    else if (k === 'larva') { const r = 0.48; const w = Math.sin(t * 4 + b.slot) * 0.3; bm.position.set(f.x + Math.cos(a + w * 0.2) * r, 0.42 + (b.slot % 2) * 0.1, f.z + Math.sin(a + w * 0.2) * r); bm.rotation.set(Math.PI / 2, 0, a + w); bm.scale.set(1, 1 + 0.15 * Math.sin(t * 6 + b.slot), 1); }
+    else { const r = 0.85 + (b.slot % 2) * 0.15; bm.position.set(f.x + Math.cos(a) * r, 0.08, f.z + Math.sin(a) * r); bm.rotation.set(Math.PI / 2, 0, a); bm.scale.set(1, 1, 1); }
+    bm.updateMatrix(); const m = broodMeshes[k]; if (cnt[k] < BROOD_MAX) m.setMatrixAt(cnt[k]++, bm.matrix);
+  }
+  for (const k in broodMeshes) { broodMeshes[k].count = cnt[k]; broodMeshes[k].instanceMatrix.needsUpdate = true; }
+}
+
+// ---------- side panel ----------
+const cardsEl = document.getElementById('cards');
+const ui = {};
+{
+  const c = document.createElement('div'); c.className = 'card sel'; c.id = 'selCard';
+  c.innerHTML = `
+    <div class="card-head"><h2 id="selName">Fly</h2><span class="chip" id="stS">flying</span></div>
+    <div class="sel-meta" id="selMeta"></div>
+    <div class="meter"><span>Energy</span><div class="bar"><i id="enS"></i></div><span id="enNS">45%</span></div>
+    <div class="meter"><span>Age</span><div class="bar"><i id="agS"></i></div><span id="agNS">0 d</span></div>
+    <canvas class="brain" id="brS" width="680" height="472" aria-label="Live neuron activity of the selected fly"></canvas>
+    <div class="prefs">
+      <div class="pref"><span>Clover</span><b id="pcS">+0.00</b></div>
+      <div class="pref"><span>Lily</span><b id="plS">+0.00</b></div>
+      <div class="pref"><span>Fruit</span><b id="pfS">+0.00</b></div>
+    </div>
+    <div class="counts" id="ctS"></div>
+    <div class="genes" id="genesS"></div>
+    <div class="lesions">
+      <label><input type="checkbox" id="l1S"><span>Knock out Or56a <small>(can't smell geosmin)</small></span></label>
+      <label><input type="checkbox" id="l2S"><span>Block mushroom-body learning <small>(no dopamine plasticity)</small></span></label>
+      <label><input type="checkbox" id="l3S"><span>Silence the Giant Fiber <small>(no fast escape)</small></span></label>
+    </div>`;
+  cardsEl.appendChild(c);
+  const q = (s) => c.querySelector('#' + s);
+  ui.S = { st: q('stS'), en: q('enS'), enN: q('enNS'), ag: q('agS'), agN: q('agNS'), br: q('brS'), pc: q('pcS'), pl: q('plS'), pf: q('pfS'), ct: q('ctS'), genes: q('genesS'), name: q('selName'), meta: q('selMeta') };
+}
+
+// brain diagram layout (in CSS px of a 340x236 canvas)
+const NODES = [
+  ['eL', 10, 14, 'Or42b L'], ['eR', 10, 32, 'Or42b R'], ['tL', 10, 50, 'Terp L'], ['tR', 10, 68, 'Terp R'], ['gL', 10, 86, 'Or56a L'], ['gR', 10, 104, 'Or56a R'],
+  ['sug', 10, 128, 'Sugar'], ['bit', 10, 146, 'Bitter'], ['lpL', 10, 170, 'LPLC2 L'], ['lpR', 10, 188, 'LPLC2 R'], ['lc10', 10, 206, 'LC10'],
+  ['pnE', 94, 32, 'PN est'], ['pnT', 94, 59, 'PN terp'], ['pnG', 94, 86, 'PN geo'], ['lhA', 94, 122, 'LH +'], ['lhV', 94, 146, 'LH −'], ['hun', 94, 188, 'Hunger'],
+  ['mbA', 222, 32, 'MBON +'], ['mbV', 222, 59, 'MBON −'], ['pam', 222, 98, 'PAM'], ['ppl', 222, 125, 'PPL1'],
+  ['dnF', 280, 20, 'Forward'], ['dnL', 280, 46, 'Turn L'], ['dnR', 280, 72, 'Turn R'], ['dnLand', 280, 98, 'Land'], ['mn', 280, 124, 'Feed'], ['gf', 280, 188, 'Giant F.'],
+];
+const NODE_POS = Object.fromEntries(NODES.map(n => [n[0], [n[1], n[2]]]));
+const KC_POS = Array.from({ length: KC_N }, (_, i) => [160 + (i % 5) * 11, 26 + Math.floor(i / 5) * 18]);
+const EDGES = [['eL', 'pnE'], ['eR', 'pnE'], ['tL', 'pnT'], ['tR', 'pnT'], ['gL', 'pnG'], ['gR', 'pnG'], ['pnE', 'lhA'], ['pnT', 'lhA'], ['pnG', 'lhV'], ['sug', 'pam'], ['bit', 'ppl'],
+  ['lhA', 'dnLand'], ['lhA', 'dnL'], ['lhV', 'dnR'], ['mbA', 'dnL'], ['mbV', 'dnR'], ['mbA', 'dnLand'], ['lpL', 'gf'], ['lpR', 'gf'], ['lc10', 'dnR'], ['sug', 'mn'], ['hun', 'dnLand']];
+const display = {}; // smoothed activity per fly id, for the brain views
+
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function smoothActivity(fly) { const disp = display[fly.id] || (display[fly.id] = {}); for (const k in fly.n) disp[k] = (disp[k] ?? 0) + (fly.n[k] - (disp[k] ?? 0)) * 0.35; return disp; }
+function drawBrain(fly) {
+  const cv = ui.S.br, ctx = cv.getContext('2d'), s = cv.width / 340;
+  ctx.setTransform(s, 0, 0, s, 0, 0); ctx.clearRect(0, 0, 340, 236);
+  const disp = display[fly.id] || smoothActivity(fly);
+  const act = (k) => disp[k] ?? 0;
+  ctx.font = '500 8px "IBM Plex Mono", monospace'; ctx.fillStyle = '#5f786d';
+  ctx.fillText('SENSE', 4, 230); ctx.fillText('PN / LH', 88, 230); ctx.fillText('KENYON CELLS', 156, 230); ctx.fillText('MB OUT', 216, 230); ctx.fillText('MOTOR', 274, 230);
+  ctx.lineWidth = 1;
+  for (const [a, b] of EDGES) { const p = NODE_POS[a], q = NODE_POS[b]; ctx.strokeStyle = hexA(fly.accent, 0.07 + act(a) * 0.4); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
+  for (const k of ['pnE', 'pnT', 'pnG']) { const p = NODE_POS[k]; ctx.strokeStyle = hexA(fly.accent, 0.05 + act(k) * 0.25); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(158, 70); ctx.stroke(); }
+  for (const k of ['mbA', 'mbV']) { const q = NODE_POS[k]; ctx.strokeStyle = hexA(fly.accent, 0.08 + act(k) * 0.3); ctx.beginPath(); ctx.moveTo(206, 70); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
+  ctx.setLineDash([2, 3]);
+  for (const k of ['pam', 'ppl']) { const p = NODE_POS[k]; ctx.strokeStyle = k === 'pam' ? `rgba(127,209,122,${0.12 + act(k) * 0.7})` : `rgba(239,107,91,${0.12 + act(k) * 0.7})`; ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(206, 120); ctx.stroke(); }
+  ctx.setLineDash([]);
+  const lesioned = { gL: fly.lesion.or56a, gR: fly.lesion.or56a, gf: fly.lesion.gf, pam: fly.lesion.learn, ppl: fly.lesion.learn };
+  ctx.font = '9px "IBM Plex Mono", monospace'; ctx.textBaseline = 'middle';
+  for (const [k, x, y, label] of NODES) {
+    const a = act(k);
+    ctx.beginPath(); ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+    ctx.fillStyle = k === 'pam' ? `rgba(127,209,122,${0.15 + a * 0.85})` : k === 'ppl' ? `rgba(239,107,91,${0.15 + a * 0.85})` : hexA(fly.accent, 0.13 + a * 0.87); ctx.fill();
+    if (Math.random() < a * 0.35) { ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(x, y, 6.2, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.fillStyle = lesioned[k] ? '#ef6b5b' : '#9fb5ab'; ctx.fillText(label, x + 8, y);
+    if (lesioned[k]) { ctx.strokeStyle = '#ef6b5b'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke(); }
+  }
+  for (let i = 0; i < KC_N; i++) {
+    const [x, y] = KC_POS[i], a = fly.kc[i];
+    ctx.beginPath(); ctx.arc(x, y, 3.3, 0, Math.PI * 2); ctx.fillStyle = hexA(fly.accent, 0.12 + a * 0.88); ctx.fill();
+    if (Math.random() < a * 0.4) { ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.stroke(); }
+  }
+  ctx.fillStyle = '#5f786d'; ctx.font = '500 8px "IBM Plex Mono", monospace'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText('LEARNED WEIGHTS', 156, 140);
+  const base = 170; ctx.strokeStyle = '#2a3d35'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(156, base); ctx.lineTo(214, base); ctx.stroke();
+  for (let i = 0; i < KC_N; i++) {
+    const net = fly.wA[i] - fly.wV[i], h = net * 50;
+    ctx.fillStyle = net >= 0 ? '#7fd17a' : '#ef6b5b';
+    ctx.fillRect(156 + i * 1.95, h >= 0 ? base - h : base, 1.4, Math.max(0.6, Math.abs(h)));
+  }
+  ctx.fillStyle = '#5f786d'; ctx.font = '8px "IBM Plex Mono", monospace';
+  ctx.fillText('+ like', 156, 150); ctx.fillText('− avoid', 156, 196);
+}
+
+const fmt = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+const STATE_LABEL = { flying: 'flying', landing: 'landing', feeding: 'feeding', escape: 'escape jump', stunned: 'stunned', mating: 'mating', laying: 'laying eggs' };
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// fly-time clock: Day N hh:mm, plus the real wall-clock time it happened
+function flyTime(t) { const d = Math.floor(t / DAY), m = Math.floor((t / DAY - d) * 1440); return `day ${d + 1} ${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
+const wall = (d) => d ? d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+function geneBars(rec) {
+  const p = express(rec.genome);
+  return TRAITS.map(k => { const [label, lo, hi] = GENES[k], v = (p[k] - lo) / (hi - lo); return `<div class="gene"><span>${label}</span><div class="bar"><i style="width:${(v * 100).toFixed(0)}%;background:${rec.color}"></i></div><b>${p[k].toFixed(2)}</b></div>`; }).join('');
+}
+function goalText(f) {
+  if (f.mate) return f.sex === 'F' ? `being courted by ${nameOf(f.mate.id)}` : `courting ${nameOf(f.mate.id)}`;
+  if (f.eggs) return `carrying ${f.eggs} eggs (father ${nameOf(f.fatherId)}), looking for fruit`;
+  if (!f.adult) return 'not yet mature';
+  if (f.refract > 0 && f.sex === 'F') return 'not receptive (mated recently)';
+  return f.energy < 0.3 ? 'hungry: feeding first' : 'ready to mate';
+}
+let selGenesFor = null;
+function updatePanel() {
+  const fly = sel, u = ui.S;
+  if (fly) {
+    const st = fly.state === 'feeding' && fly.flower && fly.flower.type !== 'clover' ? 'tasting' : fly.state;
+    u.st.textContent = fly.state === 'feeding' && fly.flower ? `on ${FLOWER_NAME[fly.flower.type]}` : STATE_LABEL[fly.state];
+    u.st.className = 'chip ' + st;
+    u.en.style.width = (fly.energy * 100).toFixed(1) + '%'; u.en.style.background = fly.accent; u.enN.textContent = Math.round(fly.energy * 100) + '%';
+    u.ag.style.width = (sat(fly.age / fly.lifespan) * 100).toFixed(1) + '%'; u.ag.style.background = fly.accent; u.agN.textContent = (fly.age / DAY).toFixed(1) + ' d';
+    for (const [k, t] of [['pc', 'clover'], ['pl', 'lily'], ['pf', 'fruit']]) { const v = fly.valueOf(t); u[k].textContent = fmt(v); u[k].style.color = v > 0.05 ? 'var(--good)' : v < -0.05 ? 'var(--bad)' : 'var(--ink)'; }
+    const c = fly.counts, r = fly.rec;
+    u.ct.textContent = `${goalText(fly)} · ${r.clutches} clutches, ${r.eggs} eggs · ${r.kids.length} offspring · escapes ${c.escapes}`;
+    if (selGenesFor !== fly) {
+      selGenesFor = fly;
+      u.name.innerHTML = `<span style="color:${fly.accent}">${esc(fly.name)} ${SEX[fly.sex]}</span>`;
+      document.getElementById('selCard').style.setProperty('--sel', fly.accent);
+      u.meta.innerHTML = `${r.wild ? 'wild immigrant' : r.gen === 0 ? 'founder' : `generation ${r.gen}`} · ${r.mother != null ? `child of ${esc(nameOf(r.mother))} × ${esc(nameOf(r.father))}` : 'no known parents'} · inbreeding ${r.F.toFixed(3)} · born ${flyTime(r.born)} (${wall(r.bornWall)})`;
+      u.genes.innerHTML = `<p class="sec-title">Genes (average of the two copies)</p>` + geneBars(r);
+    }
+  }
+  // population list
+  const flies = [...sim.flies].sort((a, b) => a.id - b.id);
+  $('popList').innerHTML = flies.map(f => `<button class="pchip${f === sel ? ' on' : ''}" data-id="${f.id}" style="--c:${f.accent}" title="${esc(goalText(f))}"><i></i>${esc(f.name)}${SEX[f.sex]}<small>${(f.age / DAY).toFixed(0)}d${f.eggs ? ' · ' + f.eggs + '🥚' : ''}</small></button>`).join('');
+  const cnt = broodCounts(), males = sim.flies.filter(f => f.sex === 'M').length, maxGen = Math.max(0, ...sim.flies.map(f => f.rec.gen));
+  $('popStats').textContent = `${sim.flies.length} adults (${sim.flies.length - males}♀ ${males}♂) · ${cnt.egg} eggs · ${cnt.larva} larvae · ${cnt.pupa} pupae · newest generation ${maxGen} · ${ped.size} flies ever`;
+  $('popTag').textContent = `${sim.flies.length} adults · ${cnt.egg + cnt.larva + cnt.pupa} young · gen ${maxGen}`;
+  if (logDirty) {
+    logDirty = false;
+    $('log').innerHTML = sim.logs.slice(0, 18).map(l => `<div class="k-${l.kind || ''}"><b style="color:${l.color}">${flyTime(l.t)} ${esc(l.name)}</b> ${esc(l.msg)}</div>`).join('');
+  }
+  $('clock').textContent = flyTime(sim.t);
+  for (const id of ['cpName', 'pipName']) { const e = $(id); if (sel) { e.textContent = sel.name + SEX[sel.sex]; e.style.background = sel.accent; } }
+}
+function broodCounts() { const c = { egg: 0, larva: 0, pupa: 0 }; for (const b of sim.brood) c[b.stage]++; return c; }
+
+// ---------- controls ----------
+const $ = (id) => document.getElementById(id);
+function setPaused(p) { sim.paused = p; $('pause').textContent = p ? 'Resume' : 'Pause'; }
+function startSim() { $('gate').classList.add('out'); setPaused(false); }
+$('startBtn').onclick = () => { if (sim.ended) initSim(); startSim(); };
+$('pause').onclick = () => { if (!$('gate').classList.contains('out')) startSim(); else setPaused(!sim.paused); };
+$('speed').onchange = (e) => sim.speed = +e.target.value;
+$('reset').onclick = () => initSim();
+$('thS').onclick = () => spawnThreat(sel);
+$('wildNow').onclick = () => { if (sim.flies.length < MAX_ADULTS) { const m = sim.flies.filter(f => f.sex === 'M').length; select(spawnWild(sim, m * 2 < sim.flies.length ? 'M' : 'F')); } };
+$('odormap').onchange = (e) => { odorPlane.visible = e.target.checked; if (e.target.checked) paintOdor(); };
+$('popList').onclick = (e) => { const b = e.target.closest('.pchip'); if (b) { const f = sim.flies.find(f => f.id === +b.dataset.id); if (f) select(f); } };
+$('l1S').onchange = (e) => { if (!sel) return; sel.lesion.or56a = e.target.checked; sim.log(sel, e.target.checked ? 'lost its Or56a receptors. Rotting fruit now smells like plain ester.' : 'got its Or56a receptors back.'); };
+$('l2S').onchange = (e) => { if (!sel) return; sel.lesion.learn = e.target.checked; sim.log(sel, e.target.checked ? 'can no longer change its mushroom-body synapses.' : 'can learn again.'); };
+$('l3S').onchange = (e) => { if (!sel) return; sel.lesion.gf = e.target.checked; sim.log(sel, e.target.checked ? 'has a silenced Giant Fiber. Escapes will be slow.' : 'has a working Giant Fiber again.'); };
+function select(f) {
+  if (sel) sel.trail.visible = false;
+  sel = f; selGenesFor = null;
+  if (!f) return;
+  f.trail.visible = true;
+  $('l1S').checked = f.lesion.or56a; $('l2S').checked = f.lesion.learn; $('l3S').checked = f.lesion.gf;
+  updatePanel(); if (treeOpen) renderTree(true);
+}
+// left-click a fly: loom at it. right-click a fly: select and follow it. right-click elsewhere: stop following.
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2(); let downAt = null;
+let followZoom = false;
+function setFollow(which) { $('cam').value = which; followZoom = which !== 'orbit'; }
+$('cam').onchange = (e) => setFollow(e.target.value);
+function flyUnderPointer(e) {
+  const rc = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  let bestFly = null, bestD = 1e9;
+  for (const f of sim.flies) {
+    const p = new THREE.Vector3(f.x, f.y, f.z);
+    const tol = Math.max(1.2, p.distanceTo(camera.position) * 0.045);
+    const d = ray.ray.distanceToPoint(p); if (d < tol && d < bestD) { bestD = d; bestFly = f; }
+  }
+  return bestFly;
+}
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+renderer.domElement.addEventListener('pointerdown', (e) => downAt = [e.clientX, e.clientY, e.button]);
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!downAt || e.button !== downAt[2] || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  const fly = flyUnderPointer(e);
+  if (e.button === 0) { if (fly) { select(fly); spawnThreat(fly); } }
+  else if (e.button === 2) { if (fly) select(fly); setFollow(fly ? 'sel' : 'orbit'); }
+});
+controls.enablePan = false;
+
+// ---------- generations window: family tree + timeline ----------
+let treeOpen = false, treeTab = 'tree', treeDrawnV = -1, hoverId = null;
+$('treeBtn2').onclick = () => $('treeBtn').onclick();
+$('treeBtn').onclick = () => { treeOpen = !treeOpen; $('treeModal').hidden = !treeOpen; if (treeOpen) renderTree(true); };
+$('tmClose').onclick = () => { treeOpen = false; $('treeModal').hidden = true; };
+for (const b of document.querySelectorAll('.tm-tabs button')) b.onclick = () => {
+  treeTab = b.dataset.tab;
+  for (const o of document.querySelectorAll('.tm-tabs button')) o.setAttribute('aria-pressed', o === b);
+  $('tmTree').hidden = treeTab !== 'tree'; $('tmTimeWrap').hidden = treeTab !== 'time'; renderTree(true);
+};
+const PX_DAY = 30, LANE = 18, ROW_PAD = 14, LEFT = 74, TOP = 34;
+// layout: x = time (fly days), one band per generation, each fly gets a lane where its life bar fits
+function layoutTree() {
+  const now = sim.t, recs = [...ped.values()].sort((a, b) => a.born - b.born || a.id - b.id);
+  const gens = {}; for (const r of recs) (gens[r.gen] = gens[r.gen] || []).push(r);
+  const pos = new Map(); let y = TOP; const bands = [];
+  for (const g of Object.keys(gens).map(Number).sort((a, b) => a - b)) {
+    const lanes = []; // end time of the last bar in each lane
+    for (const r of gens[g]) {
+      const s = r.born, e = r.died ?? now;
+      let li = lanes.findIndex(end => end + DAY * 1.6 < s);
+      if (li < 0) { li = lanes.length; lanes.push(e); } else lanes[li] = e;
+      pos.set(r.id, { x: LEFT + s / DAY * PX_DAY, x2: LEFT + e / DAY * PX_DAY, y: y + li * LANE + LANE / 2, r });
+    }
+    bands.push({ g, y, h: lanes.length * LANE }); y += lanes.length * LANE + ROW_PAD;
+  }
+  return { pos, bands, w: LEFT + (now / DAY) * PX_DAY + 120, h: y + 10 };
+}
+function ancestorsOf(id, out = new Set()) { const r = ped.get(id); if (r && r.mother != null) for (const p of [r.mother, r.father]) if (!out.has(p)) { out.add(p); ancestorsOf(p, out); } return out; }
+function renderTree(force) {
+  if (!treeOpen) return;
+  const living = sim.flies.length, maxGen = Math.max(0, ...[...ped.values()].map(r => r.gen));
+  $('tmMeta').textContent = `founded ${wall(sim.started)} · now ${flyTime(sim.t)} · ${ped.size} flies in ${maxGen + 1} generation${maxGen ? 's' : ''} · ${living} alive`;
+  if (treeTab === 'time') { drawTimeline(); return; }
+  if (!force && treeDrawnV === pedVersion && sim.t - lastTreeT < DAY / 2) return;
+  treeDrawnV = pedVersion; lastTreeT = sim.t;
+  const { pos, bands, w, h } = layoutTree();
+  let s = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;
+  // day grid
+  const days = Math.ceil(sim.t / DAY) + 1;
+  for (let d = 0; d <= days; d++) { const x = LEFT + d * PX_DAY; s += `<line x1="${x}" y1="${TOP - 8}" x2="${x}" y2="${h}" class="grid${d % 5 ? '' : ' major'}"/>${d % 5 === 0 ? `<text x="${x + 3}" y="${TOP - 14}" class="axis">day ${d + 1}</text>` : ''}`; }
+  for (const b of bands) s += `<rect x="0" y="${b.y - 4}" width="${w}" height="${b.h + 8}" class="band${b.g % 2 ? ' odd' : ''}"/><text x="8" y="${b.y + 12}" class="glabel">${b.g === 0 ? 'Founders' : 'Gen ' + b.g}</text>`;
+  // parent links: from each parent's life bar at the moment the egg was laid, to the child's birth
+  for (const [id, p] of pos) {
+    const r = p.r; if (r.mother == null) continue;
+    for (const [pid, cls] of [[r.mother, 'lm'], [r.father, 'lf']]) {
+      const q = pos.get(pid); if (!q) continue;
+      const lx = Math.min(q.x2, LEFT + (r.laidAt ?? r.born) / DAY * PX_DAY), mx = (lx + p.x) / 2;
+      s += `<path d="M${lx},${q.y} C${mx},${q.y} ${mx},${p.y} ${p.x},${p.y}" class="link ${cls}" data-c="${id}" data-p="${pid}"/>`;
+    }
+  }
+  for (const [id, p] of pos) {
+    const r = p.r, alive = r.died == null;
+    s += `<g class="fnode${alive ? ' alive' : ''}${sel && sel.id === id ? ' sel' : ''}${r.wild ? ' wild' : ''}" data-id="${id}">
+      <line x1="${p.x}" y1="${p.y}" x2="${Math.max(p.x + 2, p.x2)}" y2="${p.y}" stroke="${r.color}" class="life"/>
+      ${alive ? '' : `<text x="${p.x2 + 2}" y="${p.y + 3}" class="dagger">†</text>`}
+      <circle cx="${p.x}" cy="${p.y}" r="5.5" fill="${r.color}"/>
+      <text x="${p.x + 8}" y="${p.y - 4}" class="nm">${esc(r.name)}${SEX[r.sex]}</text></g>`;
+  }
+  s += '</svg>';
+  $('tmTree').innerHTML = s;
+  if (hoverId != null) highlight(hoverId);
+}
+let lastTreeT = 0;
+function storyOf(r) {
+  const life = r.died != null ? `died ${flyTime(r.died)} (${wall(r.diedWall)}) of ${r.cause}, aged ${((r.died - r.born) / DAY).toFixed(1)} days` : `alive, ${((sim.t - r.born) / DAY).toFixed(1)} days old`;
+  const origin = r.mother != null ? `child of ${nameOf(r.mother)} × ${nameOf(r.father)} · laid as an egg ${flyTime(r.laidAt)}` : (r.wild ? 'wild immigrant, unrelated' : 'founder, unrelated');
+  const kids = r.kids.length ? `${r.kids.length} offspring` : 'no offspring';
+  const mates = r.mates.size ? ` · mated with ${[...r.mates].map(nameOf).join(', ')}` : '';
+  return `<b style="color:${r.color}">${esc(r.name)} ${SEX[r.sex]}</b> · ${r.gen ? 'generation ' + r.gen : 'generation 0'} · ${esc(origin)}<br>born ${flyTime(r.born)} (${wall(r.bornWall)}) · ${life}<br>inbreeding ${r.F.toFixed(3)} · ${r.clutches} clutches, ${r.eggs} eggs · ${kids}${esc(mates)}`;
+}
+function highlight(id) {
+  const anc = ancestorsOf(id), svg = $('tmTree');
+  svg.classList.toggle('hl', id != null);
+  for (const g of svg.querySelectorAll('.fnode')) { const i = +g.dataset.id; g.classList.toggle('on', i === id); g.classList.toggle('anc', anc.has(i)); }
+  for (const l of svg.querySelectorAll('.link')) l.classList.toggle('on', +l.dataset.c === id || (anc.has(+l.dataset.c) && anc.has(+l.dataset.p)));
+}
+$('tmTree').addEventListener('mouseover', (e) => {
+  const g = e.target.closest('.fnode'); if (!g) return;
+  hoverId = +g.dataset.id; highlight(hoverId); $('tmInfo').innerHTML = storyOf(ped.get(hoverId)) + '<br><small>Highlighted: its whole line of ancestors.' + (ped.get(hoverId).died == null ? ' Click to select this fly.' : '') + '</small>';
+});
+$('tmTree').addEventListener('mouseleave', () => { hoverId = null; highlight(null); });
+$('tmTree').addEventListener('click', (e) => { const g = e.target.closest('.fnode'); if (!g) return; const f = sim.flies.find(f => f.id === +g.dataset.id); if (f) select(f); });
+// timeline: how many eggs, larvae, pupae and adults (by generation) there were over time
+function drawTimeline() {
+  const cv = $('tmTime'), wrap = $('tmTimeWrap'), W = wrap.clientWidth, H = wrap.clientHeight;
+  if (!W || !H) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const S = sim.samples; if (S.length < 2) { ctx.fillStyle = '#8aa398'; ctx.font = '12px "IBM Plex Sans", sans-serif'; ctx.fillText('The timeline fills in as the days go by.', 16, 28); return; }
+  const L = 44, R = 46, T = 30, B = 30, pw = W - L - R, ph = H - T - B;
+  const maxT = S[S.length - 1].t, maxGen = Math.max(...S.map(s => s.maxGen));
+  const maxY = Math.max(8, ...S.map(s => s.egg + s.larva + s.pupa + s.adults));
+  const X = (t) => L + t / maxT * pw, Y = (v) => T + ph - v / maxY * ph;
+  const genCol = (g) => `hsl(${(g * 47 + 40) % 360} 70% 62%)`;
+  const layers = [['egg', '#f5efdc'], ['larva', '#d9cfae'], ['pupa', '#9a6a38']];
+  for (let g = 0; g <= maxGen; g++) layers.push(['g' + g, genCol(g)]);
+  const acc = new Float32Array(S.length);
+  for (const [k, col] of layers) {
+    ctx.beginPath();
+    S.forEach((s, i) => { const v = k[0] === 'g' ? (s.gens[+k.slice(1)] || 0) : s[k]; const y = Y(acc[i] + v); i ? ctx.lineTo(X(s.t), y) : ctx.moveTo(X(s.t), y); });
+    for (let i = S.length - 1; i >= 0; i--) ctx.lineTo(X(S[i].t), Y(acc[i]));
+    ctx.closePath(); ctx.fillStyle = col; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1;
+    S.forEach((s, i) => acc[i] += k[0] === 'g' ? (s.gens[+k.slice(1)] || 0) : s[k]);
+  }
+  // mean inbreeding of living adults (right axis, 0 to 0.5)
+  ctx.beginPath(); S.forEach((s, i) => { const y = T + ph - s.F / 0.5 * ph; i ? ctx.lineTo(X(s.t), y) : ctx.moveTo(X(s.t), y); });
+  ctx.strokeStyle = '#ef6b5b'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#8aa398'; ctx.font = '11px "IBM Plex Mono", monospace';
+  for (let v = 0; v <= maxY; v += Math.ceil(maxY / 5)) { ctx.fillText(v, 8, Y(v) + 4); ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(L + pw, Y(v)); ctx.stroke(); }
+  for (let d = 0; d <= maxT / DAY; d += Math.max(1, Math.ceil(maxT / DAY / 8))) ctx.fillText('day ' + (d + 1), X(d * DAY) - 12, H - 10);
+  ctx.fillStyle = '#ef6b5b'; ctx.fillText('0.5', W - R + 6, T + 4); ctx.fillText('0', W - R + 6, T + ph);
+  // legend
+  let lx = L; ctx.font = '11px "IBM Plex Sans", sans-serif';
+  const leg = [['eggs', '#f5efdc'], ['larvae', '#d9cfae'], ['pupae', '#9a6a38'], ...Array.from({ length: maxGen + 1 }, (_, g) => [g ? 'gen ' + g : 'founders', genCol(g)]), ['inbreeding', '#ef6b5b']];
+  for (const [t, c] of leg) { ctx.fillStyle = c; ctx.fillRect(lx, 10, 10, 10); ctx.fillStyle = '#c9d6cf'; ctx.fillText(t, lx + 14, 19); lx += ctx.measureText(t).width + 28; }
+}
+function sample() {
+  const c = broodCounts(), gens = {};
+  for (const f of sim.flies) gens[f.rec.gen] = (gens[f.rec.gen] || 0) + 1;
+  const F = sim.flies.length ? sim.flies.reduce((s, f) => s + f.rec.F, 0) / sim.flies.length : 0;
+  sim.samples.push({ t: sim.t, ...c, adults: sim.flies.length, gens, maxGen: Math.max(0, ...Object.keys(gens).map(Number)), F });
+}
+
+// how strongly each brain region (per hemisphere) is driven by a fly's model neurons.
+// Shared by the mesh viewer and the 3D circuit so both light up from the same signals.
+// hemisphere 'a' listens to the left antenna/eye, 'b' to the right. dopa: 'g' = PAM (green), 'r' = PPL1 (red)
+function regionLevels(f) {
+  const n = f.n, out = {};
+  let kcm = 0; for (let i = 0; i < KC_N; i++) kcm += f.kc[i]; kcm = sat(kcm / KC_K);
+  const flying = f.state === 'flying' || f.state === 'landing' || f.state === 'escape' ? 0.25 : 0.05;
+  const put = (id, sd, a, dopa = null, dv = 0) => { out[id + '_' + sd] = { a, dopa, dv }; };
+  const sideVals = { a: ['eL', 'tL', 'gL', 'lpL'], b: ['eR', 'tR', 'gR', 'lpR'] };
+  for (const sd of ['a', 'b']) {
+    const [e, t, g, lp] = sideVals[sd].map(k => n[k]);
+    put('AL', sd, 0.6 * Math.max(e, t, g) + 0.4 * Math.max(n.pnE, n.pnT, n.pnG));
+    put('LH', sd, Math.max(n.lhA, n.lhV));
+    put('CA', sd, kcm); put('PED', sd, kcm * 0.9);
+    put('aL', sd, kcm * 0.7, 'r', n.ppl); put('apL', sd, Math.max(kcm * 0.6, n.mbA), 'r', n.ppl);
+    put('bL', sd, kcm * 0.7, 'g', n.pam); put('bpL', sd, Math.max(kcm * 0.6, n.mbV), 'g', n.pam); put('gL', sd, kcm * 0.7, 'g', n.pam);
+    put('ME', sd, flying + lp * 0.6); put('LO', sd, flying * 0.6 + Math.max(lp, n.lc10 * 0.8)); put('LOP', sd, flying + lp * 0.5);
+    put('GNG', sd, Math.max(n.sug, n.bit, n.mn, n.dnLand * 0.5, n.gf));
+  }
+  return out;
+}
+
+// ---------- real brain viewer (VFB JRC2018Unisex meshes) ----------
+const brainView = (() => {
+  const anat = { brain: null, pts: {} }; // decoded shapes, handed to the 3D circuit view
+  const host = document.getElementById('brainView'), tip = document.getElementById('brainTip');
+  const data = window.__BRAIN_DATA;
+  const r2 = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  r2.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); host.prepend(r2.domElement);
+  const sc = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1.6, 0.1, 50); cam.position.set(0, 0.25, 4.2);
+  const oc = new THREE.OrbitControls(cam, r2.domElement); oc.enableZoom = true; oc.enablePan = false; oc.minDistance = 2; oc.maxDistance = 8; oc.enableDamping = true;
+  oc.autoRotate = true; oc.autoRotateSpeed = 0.6;
+  r2.domElement.addEventListener('pointerdown', () => oc.autoRotate = false);
+  sc.add(new THREE.HemisphereLight('#ffffff', '#30403a', 0.9));
+  const dl = new THREE.DirectionalLight('#ffffff', 0.6); dl.position.set(2, 3, 4); sc.add(dl);
+  const lo = data.bboxMin, hi = data.bboxMax;
+  const brainMesh = data.meshes.find(m => m.id === 'brain');
+  const b64 = (s) => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
+  // template space: x = left-right, y = dorsal→ventral, z = anterior→posterior (µm)
+  const cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2, cz = (lo[2] + hi[2]) / 2, S = 3.2 / (hi[0] - lo[0]);
+  // template µm -> scene units, shared with anything else drawn in this brain space
+  anat.toScene = (x, y, z, out) => out.set((x - cx) * S, -(y - cy) * S, -(z - cz) * S);
+  anat.b64 = (s) => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
+  const regions = {};
+  const root = new THREE.Group(); sc.add(root);
+  for (const m of data.meshes) {
+    const q = new Uint16Array(b64(m.pos)), idx = m.idxType === 'I' ? new Uint32Array(b64(m.idx)) : new Uint16Array(b64(m.idx));
+    const pos = new Float32Array(q.length);
+    for (let i = 0; i < q.length; i += 3) {
+      pos[i] = ((lo[0] + q[i] / 65535 * (hi[0] - lo[0])) - cx) * S;
+      pos[i + 1] = -((lo[1] + q[i + 1] / 65535 * (hi[1] - lo[1])) - cy) * S;
+      pos[i + 2] = -((lo[2] + q[i + 2] / 65535 * (hi[2] - lo[2])) - cz) * S;
+    }
+    const posAttr = new THREE.BufferAttribute(pos, 3);
+    if (m.id === 'brain') {
+      anat.brain = pos;
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', posAttr); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeVertexNormals();
+      root.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#bcd0c6', transparent: true, opacity: 0.1, depthWrite: false, roughness: .6 })));
+      continue;
+    }
+    // split bilateral region meshes into two hemispheres by triangle centroid
+    const sides = { a: [], b: [] };
+    for (let t = 0; t < idx.length; t += 3) {
+      const x = pos[idx[t] * 3] + pos[idx[t + 1] * 3] + pos[idx[t + 2] * 3];
+      (x < 0 ? sides.a : sides.b).push(idx[t], idx[t + 1], idx[t + 2]);
+    }
+    for (const sd of ['a', 'b']) {
+      if (!sides[sd].length) continue;
+      { const used = [...new Set(sides[sd])], p = new Float32Array(used.length * 3);
+        used.forEach((v, i) => { p[i * 3] = pos[v * 3]; p[i * 3 + 1] = pos[v * 3 + 1]; p[i * 3 + 2] = pos[v * 3 + 2]; });
+        anat.pts[m.id + '_' + sd] = p; }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', posAttr);
+      g.setIndex(new THREE.BufferAttribute(pos.length / 3 > 65535 ? new Uint32Array(sides[sd]) : new Uint16Array(sides[sd]), 1)); g.computeVertexNormals();
+      const mat = new THREE.MeshStandardMaterial({ color: '#40564d', emissive: '#000000', roughness: .55, transparent: true, opacity: 0.92 });
+      const mesh = new THREE.Mesh(g, mat); mesh.userData.label = m.label; root.add(mesh);
+      regions[m.id + '_' + sd] = mesh;
+    }
+  }
+  let fly = 0, visible = true; const cA = new THREE.Color(), base = new THREE.Color('#40564d'), green = new THREE.Color('#7fd17a'), red = new THREE.Color('#ef6b5b'), tmp = new THREE.Color();
+  const smooth = {};
+  function set(k, a, dopa) {
+    const m = regions[k]; if (!m) return;
+    smooth[k] = (smooth[k] ?? 0) + (a - (smooth[k] ?? 0)) * 0.25; a = smooth[k];
+    tmp.copy(base).lerp(cA, sat(a));
+    if (dopa) tmp.lerp(dopa.c, sat(dopa.v) * 0.85);
+    m.material.color.copy(tmp);
+    m.material.emissive.copy(cA).multiplyScalar(sat(a) * 0.55);
+    if (dopa && dopa.v > 0.05) m.material.emissive.lerp(dopa.c, sat(dopa.v) * 0.8);
+  }
+  function update(f) {
+    if (!visible) return;
+    cA.set(f.accent);
+    const L = regionLevels(f);
+    for (const k in L) set(k, L[k].a, L[k].dopa ? { c: L[k].dopa === 'g' ? green : red, v: L[k].dv } : null);
+  }
+  function resize() { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; r2.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(host); resize();
+  // hover names
+  const rc = new THREE.Raycaster(), mp = new THREE.Vector2();
+  r2.domElement.addEventListener('pointermove', (e) => {
+    const b = r2.domElement.getBoundingClientRect(); mp.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
+    rc.setFromCamera(mp, cam); const hit = rc.intersectObjects(Object.values(regions))[0];
+    tip.textContent = hit ? hit.object.userData.label : 'Drag to turn. Point at a region to name it.';
+  });
+  document.getElementById('pipMin').onclick = (e) => { const p = document.getElementById('pip'); p.classList.toggle('min'); visible = !p.classList.contains('min'); e.target.textContent = visible ? '–' : '+'; if (visible) resize(); };
+  return { anat, render(flies) { if (!visible) return; update(flies[fly]); oc.update(); r2.render(sc, cam); } };
+})();
+
+// ---------- 3D brain circuit: the model's neurons placed in the real brain's 3D layout ----------
+// The brain volume is filled with a lattice of points (a 3D "matrix" in the fly-brain shape). Points inside a
+// real VFB region glow with that region's activity. On top sit the model's neurons (the same ones as the 2D
+// diagram), each placed inside the region where that real cell type lives, wired along the real routes:
+// antenna -> antennal lobe -> (calyx) -> lateral horn, Kenyon cells -> peduncle -> lobes, optic lobe -> Giant Fiber -> neck.
+const circuitView = (() => {
+  const host = $('circuitView'), tip = $('circuitTip'), pip = $('cpip'), A = brainView.anat;
+  const r3 = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  r3.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); host.prepend(r3.domElement);
+  const sc = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1.45, 0.05, 50); cam.position.set(0.9, 0.55, 4.3);
+  const oc = new THREE.OrbitControls(cam, r3.domElement); oc.enablePan = false; oc.minDistance = 1.4; oc.maxDistance = 8; oc.enableDamping = true;
+  oc.autoRotate = true; oc.autoRotateSpeed = 0.45;
+  r3.domElement.addEventListener('pointerdown', () => oc.autoRotate = false);
+
+  // soft round glow sprite for every point
+  const dc = document.createElement('canvas'); dc.width = dc.height = 64; const dx = dc.getContext('2d');
+  const grd = dx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.3, 'rgba(255,255,255,.8)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+  dx.fillStyle = grd; dx.fillRect(0, 0, 64, 64);
+  const dot = new THREE.CanvasTexture(dc);
+  const glow = (size) => new THREE.PointsMaterial({ size, map: dot, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+
+  // ---- lattice: fill each shape column-by-column on a regular grid ----
+  const G = 0.068, cells = new Map();
+  function columnFill(arr, cb) {
+    const col = new Map();
+    for (let i = 0; i < arr.length; i += 3) {
+      const ix = Math.round(arr[i] / G), iy = Math.round(arr[i + 1] / G), iz = Math.round(arr[i + 2] / G), k = ix * 4096 + iy;
+      const c = col.get(k); if (!c) col.set(k, [ix, iy, iz, iz]); else { if (iz < c[2]) c[2] = iz; if (iz > c[3]) c[3] = iz; }
+    }
+    for (const [ix, iy, z0, z1] of col.values()) for (let iz = z0; iz <= z1; iz++) cb(ix, iy, iz);
+  }
+  const regionKeys = Object.keys(A.pts);
+  regionKeys.forEach((key, ri) => columnFill(A.pts[key], (i, j, k) => { const c = i + ',' + j + ',' + k; if (!cells.has(c)) cells.set(c, ri); }));
+  columnFill(A.brain, (i, j, k) => { const c = i + ',' + j + ',' + k; if (!cells.has(c)) cells.set(c, -1); });
+  const latN = cells.size, latPos = new Float32Array(latN * 3), latCol = new Float32Array(latN * 3), latTag = new Int16Array(latN);
+  { let li = 0; for (const [c, tag] of cells) { const [i, j, k] = c.split(',').map(Number); latPos[li * 3] = i * G; latPos[li * 3 + 1] = j * G; latPos[li * 3 + 2] = k * G; latTag[li++] = tag; } }
+  const latGeo = new THREE.BufferGeometry();
+  latGeo.setAttribute('position', new THREE.BufferAttribute(latPos, 3)); latGeo.setAttribute('color', new THREE.BufferAttribute(latCol, 3));
+  sc.add(new THREE.Points(latGeo, glow(0.055)));
+
+  // ---- anatomy helpers ----
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const cenCache = {};
+  const cen = (key) => cenCache[key] || (cenCache[key] = (() => { const p = A.pts[key]; const c = V(0, 0, 0); for (let i = 0; i < p.length; i += 3) c.x += p[i], c.y += p[i + 1], c.z += p[i + 2]; return c.multiplyScalar(3 / p.length); })());
+  const rnd = mulberry(4242);
+  const inside = (key, shrink = 0.5) => { const p = A.pts[key], i = Math.floor(rnd() * p.length / 3) * 3; return V(p[i], p[i + 1], p[i + 2]).lerp(cen(key), shrink); };
+  const mid = (a, b) => a.clone().add(b).multiplyScalar(0.5);
+  // three glomerulus-like sub-centres of one antennal lobe (dorsal / middle / ventral thirds)
+  function glomeruli(sd) {
+    const p = A.pts['AL_' + sd], n = p.length / 3, order = Array.from({ length: n }, (_, i) => i).sort((a, b) => p[b * 3 + 1] - p[a * 3 + 1]);
+    return [0, 1, 2].map(t => { const c = V(0, 0, 0); let m = 0; for (let q = Math.floor(t * n / 3); q < Math.floor((t + 1) * n / 3); q++, m++) { const i = order[q] * 3; c.x += p[i]; c.y += p[i + 1]; c.z += p[i + 2]; } return c.multiplyScalar(1 / m).lerp(cen('AL_' + sd), 0.45); });
+  }
+
+  // ---- neurons and connections ----
+  const nodes = [], edges = [];
+  const add = (key, label, p, big = true) => { nodes.push({ key, label, p, big }); return p; };
+  const link = (src, a, b, o = {}) => {
+    const pts = o.via ? new THREE.CatmullRomCurve3([a, ...[].concat(o.via), b]).getPoints(16)
+      : new THREE.QuadraticBezierCurve3(a, mid(a, b).add(V(0, o.lift ?? 0.1, 0)), b).getPoints(10);
+    edges.push({ src, pts, w: o.w || null, tint: o.tint || null, ph: rnd() });
+  };
+  const S = { a: 'L', b: 'R' };
+  const gngC = mid(cen('GNG_a'), cen('GNG_b')), pedC = { a: cen('PED_a'), b: cen('PED_b') };
+  let topY = -9; for (let i = 1; i < A.brain.length; i += 3) topY = Math.max(topY, A.brain[i]);
+  const neck = gngC.clone().add(V(0, -0.75, -0.1));
+  // midline motor / command neurons
+  const gfP = add('gf', 'Giant Fiber (escape command)', gngC.clone().add(V(0, 0.42, -0.12)));
+  const dn = {
+    dnF: add('dnF', 'DN forward walking/flight', gngC.clone().add(V(-0.21, 0.16, 0.02))),
+    dnL: add('dnL', 'DN turn left', gngC.clone().add(V(-0.07, 0.2, 0.04))),
+    dnR: add('dnR', 'DN turn right', gngC.clone().add(V(0.07, 0.2, 0.04))),
+    dnLand: add('dnLand', 'DN landing', gngC.clone().add(V(0.21, 0.16, 0.02))),
+  };
+  const mnP = add('mn', 'Feeding motor neurons (proboscis)', gngC.clone().add(V(0, -0.14, 0.16)));
+  const hunP = add('hun', 'Hunger state (pars intercerebralis)', V(0, topY * 0.62, mid(pedC.a, pedC.b).z - 0.05));
+  link('gf', gfP, neck.clone().add(V(0, 0, -0.05)), { lift: 0 });
+  for (const k in dn) link(k, dn[k], neck.clone().add(V(dn[k].x * 0.6, 0, 0)), { lift: 0 });
+  link('hun', hunP, dn.dnLand, { lift: 0.05 });
+  const odor = [['e', 'pnE', 'Or42b ORN (ester)', 'PN ester'], ['t', 'pnT', 'Terpene ORN', 'PN terpene'], ['g', 'pnG', 'Or56a ORN (geosmin)', 'PN geosmin']];
+  const mbonP = {}, lobeEnds = {};
+  for (const sd of ['a', 'b']) {
+    const s = S[sd], gl = glomeruli(sd), caC = cen('CA_' + sd);
+    const lhP = { lhA: add('lhA', 'Lateral horn: innate attraction', inside('LH_' + sd, 0.6)), lhV: add('lhV', 'Lateral horn: innate aversion', inside('LH_' + sd, 0.6)) };
+    odor.forEach(([o, pn, ornLabel, pnLabel], j) => {
+      const glom = gl[j];
+      // ORN cell bodies sit out in the antenna, in front of and below the lobe
+      const orn = add(o + s, `${ornLabel} ${s}`, glom.clone().add(V((sd === 'a' ? -1 : 1) * 0.05, -0.2, 0.42)));
+      add(pn, `${pnLabel} projection neuron`, glom);
+      link(o + s, orn, glom, { lift: 0.04 });
+      // PN axon: antennal lobe -> mushroom-body calyx -> lateral horn (the inner antennocerebral tract)
+      link(pn, glom, o === 'g' ? lhP.lhV : lhP.lhA, { via: [mid(glom, caC).add(V(0, 0.18, -0.1)), caC.clone().add(V(0, 0.04, 0))] });
+    });
+    // mushroom-body output neurons and dopamine neurons on the lobes
+    mbonP['mbA' + sd] = add('mbA', 'MBON approach (α′ lobe)', cen('apL_' + sd).clone().add(V(0, 0.06, 0)));
+    mbonP['mbV' + sd] = add('mbV', 'MBON avoid (β′ lobe)', cen('bpL_' + sd).clone().add(V(0, -0.05, 0.03)));
+    for (const r of ['bL', 'gL', 'bpL']) add('pam', `PAM dopamine (${r === 'gL' ? 'γ' : r === 'bL' ? 'β' : 'β′'} lobe): reward`, cen(r + '_' + sd).clone().add(V(0, -0.07, 0.05)));
+    for (const r of ['aL', 'apL']) add('ppl', `PPL1 dopamine (${r === 'aL' ? 'α' : 'α′'} lobe): punishment`, cen(r + '_' + sd).clone().add(V(0, 0.08, -0.03)));
+    // taste neurons in the gnathal ganglia
+    const sugP = add('sug', `Sugar taste neuron ${s}`, inside('GNG_' + sd, 0.55)), bitP = add('bit', `Bitter taste neuron ${s}`, inside('GNG_' + sd, 0.55));
+    link('sug', sugP, mnP, { lift: -0.04 });
+    for (const n of nodes) if (n.key === 'pam' && (n.p.x < 0) === (sd === 'a')) link('sug', sugP, n.p, { lift: 0.25, tint: 'g' });
+    for (const n of nodes) if (n.key === 'ppl' && (n.p.x < 0) === (sd === 'a')) link('bit', bitP, n.p, { lift: 0.3, tint: 'r' });
+    // lateral horn -> descending neurons
+    link('lhA', lhP.lhA, dn.dnLand, { lift: 0.12 }); link('lhA', lhP.lhA, dn.dnL, { lift: 0.12 }); link('lhV', lhP.lhV, dn.dnR, { lift: 0.12 });
+    link('mbA', mbonP['mbA' + sd], dn.dnL, { lift: 0.1 }); link('mbA', mbonP['mbA' + sd], dn.dnLand, { lift: 0.1 }); link('mbV', mbonP['mbV' + sd], dn.dnR, { lift: 0.1 });
+    // optic lobe: LPLC2 looming detectors and LC10 fly detectors in the lobula
+    for (let i = 0; i < 4; i++) link('lp' + s, add('lp' + s, `LPLC2 looming detector ${s}`, inside('LO_' + sd, 0.35)), gfP, { lift: 0.15 });
+    for (let i = 0; i < 2; i++) link('lc10', add('lc10', `LC10 fly detector ${s}`, inside('LO_' + sd, 0.35)), dn.dnR, { lift: 0.15 });
+  }
+  // Kenyon cells: dendrites in the calyx, axon down the peduncle into one lobe family, synapsing on MBONs
+  const kcNodes = [];
+  for (let i = 0; i < KC_N; i++) {
+    const sd = i < KC_N / 2 ? 'a' : 'b', fam = i % 3;
+    const p = add('kc' + i, `Kenyon cell ${i + 1} (${['γ', 'α/β', 'α′/β′'][fam]})`, inside('CA_' + sd, 0.4), false); kcNodes.push(p);
+    for (let j = 0; j < 3; j++) link('pn' + 'ETG'[j], cen('CA_' + sd), p, { lift: 0.03, w: (f) => f.wiring[i][j] });
+    const ends = fam === 0 ? [cen('gL_' + sd)] : fam === 1 ? [cen('aL_' + sd), cen('bL_' + sd)] : [cen('apL_' + sd), cen('bpL_' + sd)];
+    for (const e of ends) link('kc' + i, p, e, { via: [pedC[sd]] });
+    const end = ends[ends.length - 1];
+    // these two synapses are the ones dopamine rewrites: brightness shows the learned weight
+    link('kc' + i, end, mbonP['mbA' + sd], { lift: 0.05, w: (f) => f.wA[i] });
+    link('kc' + i, end, mbonP['mbV' + sd], { lift: 0.05, w: (f) => f.wV[i] });
+  }
+
+  // ---- GPU buffers ----
+  let segN = 0; for (const e of edges) { e.o = segN; segN += e.pts.length - 1; }
+  const ePos = new Float32Array(segN * 6), eCol = new Float32Array(segN * 6);
+  for (const e of edges) for (let s = 0; s < e.pts.length - 1; s++) { const a = e.pts[s], b = e.pts[s + 1], o = (e.o + s) * 6; ePos[o] = a.x; ePos[o + 1] = a.y; ePos[o + 2] = a.z; ePos[o + 3] = b.x; ePos[o + 4] = b.y; ePos[o + 5] = b.z; }
+  const eGeo = new THREE.BufferGeometry(); eGeo.setAttribute('position', new THREE.BufferAttribute(ePos, 3)); eGeo.setAttribute('color', new THREE.BufferAttribute(eCol, 3));
+  sc.add(new THREE.LineSegments(eGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
+  // travelling pulses: one spark per connection, running source -> target
+  const pPos = new Float32Array(edges.length * 3), pCol = new Float32Array(edges.length * 3);
+  const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3)); pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+  const pulses = new THREE.Points(pGeo, glow(0.085)); pulses.frustumCulled = false; sc.add(pulses);
+  // neuron bodies: named neurons large, Kenyon cells small
+  const mkNodes = (list, size) => {
+    const pos = new Float32Array(list.length * 3), col = new Float32Array(list.length * 3);
+    list.forEach((n, i) => { pos[i * 3] = n.p.x; pos[i * 3 + 1] = n.p.y; pos[i * 3 + 2] = n.p.z; });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const pts = new THREE.Points(g, glow(size)); sc.add(pts); return { list, col, g, pts };
+  };
+  const bigN = mkNodes(nodes.filter(n => n.big), 0.16), kcN = mkNodes(nodes.filter(n => !n.big), 0.1);
+  const schematic = [sc.children[sc.children.length - 4], pulses, bigN.pts, kcN.pts]; // wiring lines, sparks, model dots
+
+  // ---- real neurons: FlyWire skeletons (via VFB), each driven by the model neuron of the same type ----
+  const ND = window.__NEURON_DATA;
+  const TYPE = { orn_e: 'Or42b olfactory receptor neuron', orn_g: 'Or56a olfactory receptor neuron (geosmin)', pn_e: 'DM1 projection neuron (ester)', pn_g: 'DA2 projection neuron (geosmin)',
+    lh: 'Lateral horn output neuron', kc_g: 'γ Kenyon cell', kc_ab: 'α/β Kenyon cell', kc_apbp: 'α′/β′ Kenyon cell', mbon_a: 'MBON-11 (γ1pedc), approach', mbon_v: 'MBON-1 (γ5β′2a), avoid',
+    pam: 'PAM dopamine neuron, reward', pam2: 'PAM dopamine neuron, reward', pam3: 'PAM dopamine neuron, reward', ppl_a: 'PPL1 dopamine neuron (α lobe), punishment', ppl_ap: 'PPL1 dopamine neuron (α′ lobe), punishment',
+    lplc2: 'LPLC2 looming detector', lc10: 'LC10a fly detector', gf: 'Giant Fiber (DNp01)', dna02: 'DNa02 steering descending neuron', grn: 'Labellar taste neuron' };
+  const kcSlots = {}; // model KC indices per (family, side), in order
+  for (let i = 0; i < KC_N; i++) { const k = ['kc_g', 'kc_ab', 'kc_apbp'][i % 3] + (i < KC_N / 2 ? 'a' : 'b'); (kcSlots[k] = kcSlots[k] || []).push(i); }
+  const seen = {};
+  function modelKey(n) {
+    const sd = n.side, S2 = sd === 'a' ? 'L' : 'R', nth = (seen[n.key + sd] = (seen[n.key + sd] ?? -1) + 1);
+    switch (n.key) {
+      case 'orn_e': return 'e' + S2; case 'orn_g': return 'g' + S2; case 'pn_e': return 'pnE'; case 'pn_g': return 'pnG';
+      case 'lh': return nth % 2 ? 'lhV' : 'lhA'; case 'mbon_a': return 'mbA'; case 'mbon_v': return 'mbV';
+      case 'pam': case 'pam2': case 'pam3': return 'pam'; case 'ppl_a': case 'ppl_ap': return 'ppl';
+      case 'lplc2': return 'lp' + S2; case 'lc10': return 'lc10'; case 'gf': return 'gf'; case 'dna02': return sd === 'a' ? 'dnL' : 'dnR';
+      case 'grn': return nth % 2 ? 'bit' : 'sug';
+      default: { const slot = kcSlots[n.key + sd]; return 'kc' + (slot ? slot[nth % slot.length] : 0); }
+    }
+  }
+  const real = []; let rN = 0;
+  for (const n of ND.neurons) { real.push({ n, key: modelKey(n), o: rN, label: TYPE[n.key] || n.key, fw: (n.label.match(/FlyWire:(\d+)/) || [])[1] }); rN += n.n; }
+  const rPos = new Float32Array(rN * 3), rCol = new Float32Array(rN * 3), rDist = new Float32Array(rN), rOwner = new Uint16Array(rN), rIdx = [];
+  { const lo2 = ND.bboxMin, hi2 = ND.bboxMax, v = V(0, 0, 0);
+    real.forEach((r, ri) => {
+      const q = new Uint16Array(A.b64(r.n.pos)), par = new Uint16Array(A.b64(r.n.par)), dist = new Uint8Array(A.b64(r.n.dist));
+      for (let i = 0; i < r.n.n; i++) {
+        A.toScene(lo2[0] + q[i * 3] / 65535 * (hi2[0] - lo2[0]), lo2[1] + q[i * 3 + 1] / 65535 * (hi2[1] - lo2[1]), lo2[2] + q[i * 3 + 2] / 65535 * (hi2[2] - lo2[2]), v);
+        const g = r.o + i; rPos[g * 3] = v.x; rPos[g * 3 + 1] = v.y; rPos[g * 3 + 2] = v.z; rDist[g] = dist[i] / 255; rOwner[g] = ri;
+        if (par[i] !== 65535) rIdx.push(r.o + par[i], g);
+      }
+      r.soma = V(rPos[r.o * 3], rPos[r.o * 3 + 1], rPos[r.o * 3 + 2]);
+    });
+  }
+  const rGeo = new THREE.BufferGeometry();
+  rGeo.setAttribute('position', new THREE.BufferAttribute(rPos, 3)); rGeo.setAttribute('color', new THREE.BufferAttribute(rCol, 3));
+  rGeo.setIndex(new THREE.BufferAttribute(rN > 65535 ? new Uint32Array(rIdx) : new Uint16Array(rIdx), 1));
+  const realLines = new THREE.LineSegments(rGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sc.add(realLines);
+  // somata as small glowing beads
+  const somaPos = new Float32Array(real.length * 3), somaCol = new Float32Array(real.length * 3);
+  real.forEach((r, i) => { somaPos[i * 3] = r.soma.x; somaPos[i * 3 + 1] = r.soma.y; somaPos[i * 3 + 2] = r.soma.z; });
+  const somaGeo = new THREE.BufferGeometry(); somaGeo.setAttribute('position', new THREE.BufferAttribute(somaPos, 3)); somaGeo.setAttribute('color', new THREE.BufferAttribute(somaCol, 3));
+  const somata = new THREE.Points(somaGeo, glow(0.11)); sc.add(somata);
+  let mode = 'both';
+  function applyMode() {
+    realLines.visible = somata.visible = mode !== 'model';
+    for (const o of schematic) o.visible = mode !== 'real';
+  }
+  $('cpMode').onchange = (e) => { mode = e.target.value; applyMode(); };
+  applyMode();
+
+  // ---- per-frame colouring from the selected fly ----
+  let fly = 0, visible = true;
+  const acc = new THREE.Color(), cG = new THREE.Color('#7fd17a'), cR = new THREE.Color('#ef6b5b'), c = new THREE.Color();
+  const sm = {}, smR = {};
+  function act(f, key) {
+    let v;
+    if (key.startsWith('kc')) v = f.kc[+key.slice(2)];
+    else v = (display[f.id] || {})[key] ?? f.n[key] ?? 0;
+    sm[key] = (sm[key] ?? 0) + (v - (sm[key] ?? 0)) * 0.3; return sat(sm[key]);
+  }
+  function lesioned(f, key) {
+    return ((key === 'gL' || key === 'gR' || key === 'pnG') && f.lesion.or56a) || (key === 'gf' && f.lesion.gf) || ((key === 'pam' || key === 'ppl') && f.lesion.learn);
+  }
+  function update(f, now) {
+    acc.set(f.accent);
+    // lattice
+    const L = regionLevels(f), lv = new Float32Array(regionKeys.length), dv = new Float32Array(regionKeys.length), dt = [];
+    regionKeys.forEach((k, i) => { const r = L[k] || { a: 0, dv: 0 }; smR[k] = (smR[k] ?? 0) + (r.a - (smR[k] ?? 0)) * 0.2; lv[i] = sat(smR[k]); dv[i] = r.dv || 0; dt[i] = r.dopa; });
+    for (let i = 0; i < latN; i++) {
+      const t = latTag[i], o = i * 3;
+      if (t < 0) { latCol[o] = 0.07; latCol[o + 1] = 0.12; latCol[o + 2] = 0.11; continue; }
+      c.setRGB(0.15, 0.4, 0.33).lerp(acc, lv[t] * 0.75);
+      if (dt[t] && dv[t] > 0.05) c.lerp(dt[t] === 'g' ? cG : cR, sat(dv[t]) * 0.6);
+      latCol[o] = c.r; latCol[o + 1] = c.g; latCol[o + 2] = c.b;
+    }
+    latGeo.attributes.color.needsUpdate = true;
+    // connections and pulses
+    const t = now * 0.00055;
+    for (let k = 0; k < edges.length; k++) {
+      const e = edges[k], a = lesioned(f, e.src) ? 0 : act(f, e.src), w = e.w ? e.w(f) : 1;
+      const base = e.w ? 0.04 + 0.16 * w : 0.13, lvl = base + a * w * 0.85;
+      c.copy(e.tint === 'g' ? cG : e.tint === 'r' ? cR : acc).multiplyScalar(lvl);
+      for (let s = 0; s < e.pts.length - 1; s++) { const o = (e.o + s) * 6; eCol[o] = eCol[o + 3] = c.r; eCol[o + 1] = eCol[o + 4] = c.g; eCol[o + 2] = eCol[o + 5] = c.b; }
+      const ph = (t * (1.2 + a * 2.5) + e.ph) % 1, fi = ph * (e.pts.length - 1), i0 = Math.floor(fi), u = fi - i0, p0 = e.pts[i0], p1 = e.pts[Math.min(i0 + 1, e.pts.length - 1)];
+      pPos[k * 3] = p0.x + (p1.x - p0.x) * u; pPos[k * 3 + 1] = p0.y + (p1.y - p0.y) * u; pPos[k * 3 + 2] = p0.z + (p1.z - p0.z) * u;
+      const pl = a > 0.12 ? a * w : 0;
+      c.copy(e.tint === 'g' ? cG : e.tint === 'r' ? cR : acc).lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(pl * 1.2);
+      pCol[k * 3] = c.r; pCol[k * 3 + 1] = c.g; pCol[k * 3 + 2] = c.b;
+    }
+    eGeo.attributes.color.needsUpdate = true; pGeo.attributes.position.needsUpdate = true; pGeo.attributes.color.needsUpdate = true;
+    // neuron bodies
+    for (const set of [bigN, kcN]) {
+      set.list.forEach((n, i) => {
+        const les = lesioned(f, n.key), a = les ? 0 : act(f, n.key);
+        if (les) c.set('#5a1f1a');
+        else if (n.key === 'pam') c.setRGB(0.12, 0.2, 0.12).lerp(cG, a);
+        else if (n.key === 'ppl') c.setRGB(0.2, 0.1, 0.1).lerp(cR, a);
+        else c.setRGB(0.16, 0.24, 0.21).lerp(acc, a).lerp(new THREE.Color(1, 1, 1), a * a * 0.4);
+        set.col[i * 3] = c.r; set.col[i * 3 + 1] = c.g; set.col[i * 3 + 2] = c.b;
+      });
+      set.g.attributes.color.needsUpdate = true;
+    }
+    // real neurons: dim at rest; when the matching model neuron fires, the whole arbor lights up
+    // and a wave of brightness runs from the cell body out along the branches
+    if (mode !== 'model') {
+      const tt = now * 0.0011, white = new THREE.Color(1, 1, 1);
+      real.forEach((r, ri) => {
+        const les = lesioned(f, r.key), a = les ? 0 : act(f, r.key);
+        const tint = r.key === 'pam' ? cG : r.key === 'ppl' ? cR : acc;
+        c.copy(tint);
+        const end = r.o + r.n.n;
+        for (let g = r.o; g < end; g++) {
+          const ph = rDist[g] * 2.2 - tt * (0.6 + a * 1.4);
+          const wave = Math.pow(Math.max(0, Math.sin((ph - Math.floor(ph)) * Math.PI * 2)), 6);
+          const lvl = les ? 0.05 : 0.07 + a * (0.3 + 0.7 * wave);
+          rCol[g * 3] = (les ? 0.5 : c.r) * lvl; rCol[g * 3 + 1] = (les ? 0.12 : c.g) * lvl; rCol[g * 3 + 2] = (les ? 0.1 : c.b) * lvl;
+        }
+        const s = les ? new THREE.Color('#5a1f1a') : c.clone().multiplyScalar(0.25 + a * 0.75).lerp(white, a * a * 0.4);
+        somaCol[ri * 3] = s.r; somaCol[ri * 3 + 1] = s.g; somaCol[ri * 3 + 2] = s.b;
+      });
+      rGeo.attributes.color.needsUpdate = true; somaGeo.attributes.color.needsUpdate = true;
+    }
+    if (mode === 'both') { // keep the model wiring readable but secondary to the real shapes
+      for (let i = 0; i < eCol.length; i++) eCol[i] *= 0.5;
+    }
+  }
+  function resize() { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; r3.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(host); resize();
+  // hover: name the neuron under the pointer and show how active it is
+  const rc = new THREE.Raycaster(), mp = new THREE.Vector2(); rc.params.Points.threshold = 0.05; rc.params.Line.threshold = 0.015;
+  let hoverF = null;
+  r3.domElement.addEventListener('pointermove', (e) => {
+    const b = r3.domElement.getBoundingClientRect(); mp.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
+    rc.setFromCamera(mp, cam);
+    const dots = mode === 'real' ? [somata] : mode === 'model' ? [bigN.pts, kcN.pts] : [somata, bigN.pts, kcN.pts];
+    const hit = rc.intersectObjects(dots).sort((a, b) => a.distanceToRay - b.distanceToRay)[0];
+    const realOf = (ri) => ({ key: real[ri].key, label: `${real[ri].label} · real FlyWire neuron ${real[ri].fw || real[ri].n.id}` });
+    if (hit) hoverF = hit.object === somata ? realOf(hit.index) : (hit.object === bigN.pts ? bigN : kcN).list[hit.index];
+    else if (mode !== 'model') { const h = rc.intersectObject(realLines)[0]; hoverF = h ? realOf(rOwner[rIdx[h.index]]) : null; }
+    else hoverF = null;
+  });
+  r3.domElement.addEventListener('pointerleave', () => hoverF = null);
+  $('cpBig').onclick = () => {
+    const big = pip.classList.toggle('big'); if (big) setMin(false);
+    $('cpBig').textContent = big ? '⤡' : '⤢'; $('cpBig').setAttribute('aria-label', big ? 'Shrink circuit view' : 'Enlarge circuit view'); resize();
+  };
+  const setMin = (m) => { if (m && pip.classList.contains('big')) $('cpBig').onclick(); pip.classList.toggle('min', m); visible = !m; $('cpMin').textContent = m ? '+' : '–'; $('cpMin').setAttribute('aria-label', m ? 'Expand circuit view' : 'Collapse circuit view'); if (!m) resize(); };
+  $('cpMin').onclick = () => setMin(visible);
+  if (window.matchMedia('(max-width: 900px)').matches) setMin(true); // phones: start collapsed so the garden stays visible
+  let tipT = 0;
+  return {
+    render(flies, now) {
+      if (!visible) return;
+      const f = flies[fly];
+      update(f, now); oc.update(); r3.render(sc, cam);
+      if (now - tipT > 120) { tipT = now; tip.textContent = hoverF ? `${hoverF.label} · ${lesioned(f, hoverF.key) ? 'silenced' : 'activity ' + act(f, hoverF.key).toFixed(2)}` : 'Drag to turn. Point at a neuron to name it.'; }
+    },
+  };
+})();
+
+// ---------- resize & loop ----------
+function resize() { const w = stage.clientWidth, h = stage.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(stage); resize();
+
+// browsers restore form controls on reload; start every load from the same clean state
+$('cam').value = 'orbit'; followZoom = false; $('wild').checked = true;
+initSim();
+let last = performance.now(), panelT = 0, odorT = 0, mmT = 0, sampleT = 0, wildT = 0, treeT = 0;
+const camTarget = new THREE.Vector3();
+function endOfLine() {
+  sim.ended = true; setPaused(true);
+  const maxGen = Math.max(...[...ped.values()].map(r => r.gen));
+  document.querySelector('.gate-kicker').textContent = `${ped.size} flies over ${maxGen + 1} generations`;
+  document.querySelector('.gate-title').textContent = `The line ended on ${flyTime(sim.t)}`;
+  document.querySelector('.gate-sub').textContent = 'No adults, eggs, larvae or pupae are left. Open the family tree to see how it went, or start a new family.';
+  $('startBtn').lastChild.textContent = 'New family';
+  $('gate').classList.remove('out');
+}
+function frame(now) {
+  // the first rAF timestamp can be earlier than `last` (taken at script start): never step backwards
+  const real = clamp((now - last) / 1000, 0, 0.05); last = Math.max(last, now);
+  if (!sim.paused && real > 0) {
+    const steps = Math.max(1, Math.round(sim.speed * real / (1 / 60)));
+    const dt = sim.speed * real / steps;
+    for (let i = 0; i < steps; i++) {
+      sim.t += dt; stepThreats(dt); stepBrood(dt, sim);
+      for (const f of sim.flies) {
+        f.step(dt, sim);
+        // safety net: a fly whose state went non-finite would vanish from the scene, so put it back
+        if (!Number.isFinite(f.x + f.y + f.z + f.th + f.energy)) f.reset(0, 0, 0);
+      }
+      if (sim.flies.some(f => f.dead)) {
+        for (const f of sim.flies) if (f.dead) { f.dispose(); delete display[f.id]; }
+        sim.flies = sim.flies.filter(f => !f.dead);
+        if (sel && sel.dead) select(sim.flies.slice().sort((a, b) => b.id - a.id)[0] || null);
+      }
+      for (const fl of flowers) if (fl.type === 'clover') fl.nectar = Math.min(1, fl.nectar + 0.02 * dt);
+      mmT += dt; if (mmT > 0.5) { mmT = 0; matchmaker(sim); }
+      sampleT += dt; if (sampleT > DAY / 4) { sampleT = 0; sample(); }
+      // now and then an unrelated wild fly arrives, bringing fresh genes
+      wildT += dt;
+      if (wildT > DAY * WILD_EVERY_DAYS) { wildT = 0; if ($('wild').checked && sim.flies.length && sim.flies.length < MAX_ADULTS) { const m = sim.flies.filter(f => f.sex === 'M').length; spawnWild(sim, m * 2 < sim.flies.length ? 'M' : 'F'); } }
+      if (!sim.flies.length && !sim.brood.length && !sim.ended) { endOfLine(); break; }
+    }
+    odorT += real;
+    if (odorT > 2 && odorPlane.visible) { odorT = 0; paintOdor(); }
+  }
+  for (const fl of flowers) if (fl.type === 'clover') fl.headMat.color.copy(fl.baseColor).lerp(new THREE.Color('#8a6a52'), 1 - fl.nectar);
+  for (const f of sim.flies) { f.render(now / 1000); f.mesh.ring.rotation.z += 0.02; }
+  renderBrood(now / 1000);
+  if ($('cam').value !== 'orbit' && sel) {
+    // keep the fly at the centre: slide the orbit pivot onto the fly and carry the camera with it,
+    // so drag-to-orbit and scroll-zoom still work around the fly
+    const f = sel;
+    camTarget.set(f.x, f.y, f.z).sub(controls.target).multiplyScalar(followZoom ? 0.12 : 0.35);
+    controls.target.add(camTarget); camera.position.add(camTarget);
+    if (followZoom) {
+      const off = camera.position.clone().sub(controls.target), len = off.length();
+      if (len > 6.5) camera.position.copy(controls.target).add(off.setLength(len + (6 - len) * 0.08));
+      else followZoom = false;
+    }
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  if (sel) {
+    smoothActivity(sel);
+    brainView.render([sel]);
+    circuitView.render([sel], now);
+    drawBrain(sel);
+  }
+  panelT += real; treeT += real;
+  if (panelT > 0.2) { panelT = 0; updatePanel(); }
+  if (treeOpen && treeT > 1) { treeT = 0; renderTree(false); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>

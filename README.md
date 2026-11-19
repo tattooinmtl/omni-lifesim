@@ -19,6 +19,18 @@ A rate-neuron model, with neurons named after the real cell types:
 
 Flowers: clover (ester and sugar), lily (ester, terpene and bitter), rotting fruit (ester, geosmin and bitter). Each fly card has lesion switches (Or56a knockout, block learning, silence the Giant Fiber) so you can see how the two flies diverge.
 
+## Generations
+
+**Play it:** https://tattooinmtl.github.io/omni-lifesim/generations/
+
+A second version in `generations/` turns the garden into a breeding population. Three unrelated founders (A♀, B♂, C♀) each carry a diploid genome (two copies of every gene, one from each parent): smell receptor sensitivities, learning rate, Giant Fiber escape threshold, flight speed, lifespan, clutch size and body colour, plus their Kenyon-cell wiring. Learned memories are not inherited.
+
+- **Life cycle** on a compressed clock (one fly day is 20 seconds at 1× speed), with durations from real *Drosophila* at 25 °C: egg 1 day, larva 4 days, pupa 4 days, adults living about 40 days. Flies die of old age or starvation.
+- **Mating**: a mature, receptive female picks the least related free male, measured by kinship coefficient from the family tree. After mating she carries a clutch and, like a real fly after sex peptide, rejects males for a while.
+- **Egg laying**: she flies to rotting fruit and lays her eggs there; larvae and pupae develop on and around the fruit. Each fruit and the garden have a capacity limit.
+- **Inbreeding** lowers lifespan and clutch size. An unrelated wild fly arrives every 14 fly-days (or on demand) to bring in new genes.
+- **Family tree & timeline** window: every fly's life as a bar on a day axis, grouped by generation, with links from both parents at the moment the egg was laid. Hover a fly to see its whole line of ancestors and its story (sim day and real time of birth and death, parents, mates, clutches, offspring, inbreeding). The timeline shows eggs, larvae, pupae and adults per generation over time, with mean inbreeding.
+
 ## Controls
 
 - **Left-click a fly:** swoop a looming shadow at it.
