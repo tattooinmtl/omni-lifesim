@@ -25,6 +25,12 @@ Flowers: clover (ester and sugar), lily (ester, terpene and bitter), rotting fru
 - **Right-click a fly:** the camera follows it. **Right-click the ground** to go back to the free camera.
 - Drag to orbit, scroll to zoom.
 
+## Brain circuit 3D window
+
+The top-right window shows the model's neurons placed inside the real 3D brain. The brain volume is filled with a lattice of points in the shape of the fly brain, and the points inside each real region (antennal lobe, mushroom body, lateral horn, optic lobes, gnathal ganglia) glow with that region's activity. Each neuron sits in the region where that real cell type lives, and its connections follow the real routes: from the antenna into the antennal lobe, along projection-neuron tracts through the calyx to the lateral horn, from Kenyon cells down the peduncle into the lobes, and from the optic lobe to the Giant Fiber and out through the neck. Sparks travel along a connection while its source neuron is firing. The Kenyon-cell-to-MBON connections get brighter or dimmer as dopamine changes their weights, so you can watch learning happen.
+
+It runs on the same signals as the 2D diagram in the sidebar. Hover a neuron to see its name and activity, use A/B to switch flies, ⤢ to enlarge the window and – to collapse it. Positions come from real anatomy; the wiring is the model's.
+
 ## Brain meshes
 
 The region meshes come from the JRC2018Unisex template on Virtual Fly Brain: the whole brain, antennal lobe, lateral horn, mushroom-body calyx, peduncle and lobes, medulla, lobula, lobula plate and gnathal ganglia. They were downloaded as OBJ files and shrunk with `tools/shrink.py` (vertex-clustering decimation, 16-bit quantized, base64 inline).

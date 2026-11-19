@@ -94,7 +94,14 @@ details ul{padding-left:18px;margin:6px 0}
 #brainView canvas{display:block;width:100%;height:100%}
 #brainTip{position:absolute;left:8px;bottom:6px;font-family:var(--f-mono);font-size:10.5px;color:var(--ink);pointer-events:none;text-shadow:0 1px 2px #000}
 .pip-src{font-size:10px;color:var(--muted);padding:4px 8px 6px;font-family:var(--f-mono)}
-.pip.min #brainView,.pip.min .pip-src{display:none}
+.pip.min #brainView,.pip.min .pip-src,.pip.min #circuitView{display:none}
+/* second window: the 3D circuit, docked top-right */
+.pip.pip-top{top:12px;bottom:auto}
+.pip.pip-top.big{top:12px;left:12px;right:12px;bottom:12px;width:auto;z-index:15}
+.pip.pip-top.big #circuitView{aspect-ratio:auto;flex:1;min-height:0}
+#circuitView{position:relative;aspect-ratio:16/11;cursor:grab;background:radial-gradient(ellipse at center,#0f1f1a,#070d0b)}
+#circuitView canvas{display:block;width:100%;height:100%}
+#circuitTip{position:absolute;left:8px;bottom:6px;right:8px;font-family:var(--f-mono);font-size:10.5px;color:var(--ink);pointer-events:none;text-shadow:0 1px 2px #000}
 @media (max-width:900px){
   .pip{width:min(230px,58%)}
   .hint{display:none}
@@ -120,6 +127,17 @@ details ul{padding-left:18px;margin:6px 0}
       </div>
     </div>
     <div class="hint">Left-click a fly to swoop a shadow at it. Right-click a fly to follow it, right-click the ground to stop. Drag to orbit, scroll to zoom.</div>
+    <div class="pip pip-top" id="cpip">
+      <div class="pip-head">
+        <b>Brain circuit 3D</b>
+        <button class="pa" id="cpA" aria-pressed="true">A</button>
+        <button class="pb" id="cpB" aria-pressed="false">B</button>
+        <button id="cpBig" aria-label="Enlarge circuit view" title="Enlarge">⤢</button>
+        <button id="cpMin" aria-label="Collapse circuit view">–</button>
+      </div>
+      <div id="circuitView"><span id="circuitTip">Drag to turn. Point at a neuron to name it.</span></div>
+      <div class="pip-src">Places: real VFB region shapes · wiring and activity: the model</div>
+    </div>
     <div class="pip" id="pip">
       <div class="pip-head">
         <b>Real fly brain</b>
@@ -768,8 +786,31 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 });
 controls.enablePan = false;
 
+// how strongly each brain region (per hemisphere) is driven by a fly's model neurons.
+// Shared by the mesh viewer and the 3D circuit so both light up from the same signals.
+// hemisphere 'a' listens to the left antenna/eye, 'b' to the right. dopa: 'g' = PAM (green), 'r' = PPL1 (red)
+function regionLevels(f) {
+  const n = f.n, out = {};
+  let kcm = 0; for (let i = 0; i < KC_N; i++) kcm += f.kc[i]; kcm = sat(kcm / KC_K);
+  const flying = f.state === 'flying' || f.state === 'landing' || f.state === 'escape' ? 0.25 : 0.05;
+  const put = (id, sd, a, dopa = null, dv = 0) => { out[id + '_' + sd] = { a, dopa, dv }; };
+  const sideVals = { a: ['eL', 'tL', 'gL', 'lpL'], b: ['eR', 'tR', 'gR', 'lpR'] };
+  for (const sd of ['a', 'b']) {
+    const [e, t, g, lp] = sideVals[sd].map(k => n[k]);
+    put('AL', sd, 0.6 * Math.max(e, t, g) + 0.4 * Math.max(n.pnE, n.pnT, n.pnG));
+    put('LH', sd, Math.max(n.lhA, n.lhV));
+    put('CA', sd, kcm); put('PED', sd, kcm * 0.9);
+    put('aL', sd, kcm * 0.7, 'r', n.ppl); put('apL', sd, Math.max(kcm * 0.6, n.mbA), 'r', n.ppl);
+    put('bL', sd, kcm * 0.7, 'g', n.pam); put('bpL', sd, Math.max(kcm * 0.6, n.mbV), 'g', n.pam); put('gL', sd, kcm * 0.7, 'g', n.pam);
+    put('ME', sd, flying + lp * 0.6); put('LO', sd, flying * 0.6 + Math.max(lp, n.lc10 * 0.8)); put('LOP', sd, flying + lp * 0.5);
+    put('GNG', sd, Math.max(n.sug, n.bit, n.mn, n.dnLand * 0.5, n.gf));
+  }
+  return out;
+}
+
 // ---------- real brain viewer (VFB JRC2018Unisex meshes) ----------
 const brainView = (() => {
+  const anat = { brain: null, pts: {} }; // decoded shapes, handed to the 3D circuit view
   const host = document.getElementById('brainView'), tip = document.getElementById('brainTip');
   const data = JSON.parse(document.getElementById('brain-data').textContent);
   const r2 = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -798,6 +839,7 @@ const brainView = (() => {
     }
     const posAttr = new THREE.BufferAttribute(pos, 3);
     if (m.id === 'brain') {
+      anat.brain = pos;
       const g = new THREE.BufferGeometry(); g.setAttribute('position', posAttr); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeVertexNormals();
       root.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#bcd0c6', transparent: true, opacity: 0.1, depthWrite: false, roughness: .6 })));
       continue;
@@ -810,6 +852,9 @@ const brainView = (() => {
     }
     for (const sd of ['a', 'b']) {
       if (!sides[sd].length) continue;
+      { const used = [...new Set(sides[sd])], p = new Float32Array(used.length * 3);
+        used.forEach((v, i) => { p[i * 3] = pos[v * 3]; p[i * 3 + 1] = pos[v * 3 + 1]; p[i * 3 + 2] = pos[v * 3 + 2]; });
+        anat.pts[m.id + '_' + sd] = p; }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', posAttr);
       g.setIndex(new THREE.BufferAttribute(pos.length / 3 > 65535 ? new Uint32Array(sides[sd]) : new Uint16Array(sides[sd]), 1)); g.computeVertexNormals();
       const mat = new THREE.MeshStandardMaterial({ color: '#40564d', emissive: '#000000', roughness: .55, transparent: true, opacity: 0.92 });
@@ -819,9 +864,9 @@ const brainView = (() => {
   }
   let fly = 0, visible = true; const cA = new THREE.Color(), base = new THREE.Color('#40564d'), green = new THREE.Color('#7fd17a'), red = new THREE.Color('#ef6b5b'), tmp = new THREE.Color();
   const smooth = {};
-  function set(id, sd, a, dopa) {
-    const m = regions[id + '_' + sd]; if (!m) return;
-    const k = id + sd; smooth[k] = (smooth[k] ?? 0) + (a - (smooth[k] ?? 0)) * 0.25; a = smooth[k];
+  function set(k, a, dopa) {
+    const m = regions[k]; if (!m) return;
+    smooth[k] = (smooth[k] ?? 0) + (a - (smooth[k] ?? 0)) * 0.25; a = smooth[k];
     tmp.copy(base).lerp(cA, sat(a));
     if (dopa) tmp.lerp(dopa.c, sat(dopa.v) * 0.85);
     m.material.color.copy(tmp);
@@ -830,21 +875,9 @@ const brainView = (() => {
   }
   function update(f) {
     if (!visible) return;
-    const n = f.n; cA.set(f.accent);
-    let kcm = 0; for (let i = 0; i < KC_N; i++) kcm += f.kc[i]; kcm = sat(kcm / KC_K);
-    const flying = f.state === 'flying' || f.state === 'landing' || f.state === 'escape' ? 0.25 : 0.05;
-    // hemisphere 'a' = one side, 'b' = the other; each listens to the matching antenna/eye
-    const sideVals = { a: ['eL', 'tL', 'gL', 'lpL'], b: ['eR', 'tR', 'gR', 'lpR'] };
-    for (const sd of ['a', 'b']) {
-      const [e, t, g, lp] = sideVals[sd].map(k => n[k]);
-      set('AL', sd, 0.6 * Math.max(e, t, g) + 0.4 * Math.max(n.pnE, n.pnT, n.pnG));
-      set('LH', sd, Math.max(n.lhA, n.lhV));
-      set('CA', sd, kcm); set('PED', sd, kcm * 0.9);
-      set('aL', sd, kcm * 0.7, { c: red, v: n.ppl }); set('apL', sd, Math.max(kcm * 0.6, n.mbA), { c: red, v: n.ppl });
-      set('bL', sd, kcm * 0.7, { c: green, v: n.pam }); set('bpL', sd, Math.max(kcm * 0.6, n.mbV), { c: green, v: n.pam }); set('gL', sd, kcm * 0.7, { c: green, v: n.pam });
-      set('ME', sd, flying + lp * 0.6); set('LO', sd, flying * 0.6 + Math.max(lp, n.lc10 * 0.8)); set('LOP', sd, flying + lp * 0.5);
-      set('GNG', sd, Math.max(n.sug, n.bit, n.mn, n.dnLand * 0.5, n.gf));
-    }
+    cA.set(f.accent);
+    const L = regionLevels(f);
+    for (const k in L) set(k, L[k].a, L[k].dopa ? { c: L[k].dopa === 'g' ? green : red, v: L[k].dv } : null);
   }
   function resize() { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; r2.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
   new ResizeObserver(resize).observe(host); resize();
@@ -859,7 +892,237 @@ const brainView = (() => {
   const pick = (i) => { fly = i; bA.setAttribute('aria-pressed', i === 0); bB.setAttribute('aria-pressed', i === 1); };
   bA.onclick = () => pick(0); bB.onclick = () => pick(1);
   document.getElementById('pipMin').onclick = (e) => { const p = document.getElementById('pip'); p.classList.toggle('min'); visible = !p.classList.contains('min'); e.target.textContent = visible ? '–' : '+'; if (visible) resize(); };
-  return { render(flies) { if (!visible) return; update(flies[fly]); oc.update(); r2.render(sc, cam); } };
+  return { anat, render(flies) { if (!visible) return; update(flies[fly]); oc.update(); r2.render(sc, cam); } };
+})();
+
+// ---------- 3D brain circuit: the model's neurons placed in the real brain's 3D layout ----------
+// The brain volume is filled with a lattice of points (a 3D "matrix" in the fly-brain shape). Points inside a
+// real VFB region glow with that region's activity. On top sit the model's neurons (the same ones as the 2D
+// diagram), each placed inside the region where that real cell type lives, wired along the real routes:
+// antenna -> antennal lobe -> (calyx) -> lateral horn, Kenyon cells -> peduncle -> lobes, optic lobe -> Giant Fiber -> neck.
+const circuitView = (() => {
+  const host = $('circuitView'), tip = $('circuitTip'), pip = $('cpip'), A = brainView.anat;
+  const r3 = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  r3.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); host.prepend(r3.domElement);
+  const sc = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(32, 1.45, 0.05, 50); cam.position.set(0.9, 0.55, 4.3);
+  const oc = new THREE.OrbitControls(cam, r3.domElement); oc.enablePan = false; oc.minDistance = 1.4; oc.maxDistance = 8; oc.enableDamping = true;
+  oc.autoRotate = true; oc.autoRotateSpeed = 0.45;
+  r3.domElement.addEventListener('pointerdown', () => oc.autoRotate = false);
+
+  // soft round glow sprite for every point
+  const dc = document.createElement('canvas'); dc.width = dc.height = 64; const dx = dc.getContext('2d');
+  const grd = dx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.3, 'rgba(255,255,255,.8)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+  dx.fillStyle = grd; dx.fillRect(0, 0, 64, 64);
+  const dot = new THREE.CanvasTexture(dc);
+  const glow = (size) => new THREE.PointsMaterial({ size, map: dot, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+
+  // ---- lattice: fill each shape column-by-column on a regular grid ----
+  const G = 0.068, cells = new Map();
+  function columnFill(arr, cb) {
+    const col = new Map();
+    for (let i = 0; i < arr.length; i += 3) {
+      const ix = Math.round(arr[i] / G), iy = Math.round(arr[i + 1] / G), iz = Math.round(arr[i + 2] / G), k = ix * 4096 + iy;
+      const c = col.get(k); if (!c) col.set(k, [ix, iy, iz, iz]); else { if (iz < c[2]) c[2] = iz; if (iz > c[3]) c[3] = iz; }
+    }
+    for (const [ix, iy, z0, z1] of col.values()) for (let iz = z0; iz <= z1; iz++) cb(ix, iy, iz);
+  }
+  const regionKeys = Object.keys(A.pts);
+  regionKeys.forEach((key, ri) => columnFill(A.pts[key], (i, j, k) => { const c = i + ',' + j + ',' + k; if (!cells.has(c)) cells.set(c, ri); }));
+  columnFill(A.brain, (i, j, k) => { const c = i + ',' + j + ',' + k; if (!cells.has(c)) cells.set(c, -1); });
+  const latN = cells.size, latPos = new Float32Array(latN * 3), latCol = new Float32Array(latN * 3), latTag = new Int16Array(latN);
+  { let li = 0; for (const [c, tag] of cells) { const [i, j, k] = c.split(',').map(Number); latPos[li * 3] = i * G; latPos[li * 3 + 1] = j * G; latPos[li * 3 + 2] = k * G; latTag[li++] = tag; } }
+  const latGeo = new THREE.BufferGeometry();
+  latGeo.setAttribute('position', new THREE.BufferAttribute(latPos, 3)); latGeo.setAttribute('color', new THREE.BufferAttribute(latCol, 3));
+  sc.add(new THREE.Points(latGeo, glow(0.055)));
+
+  // ---- anatomy helpers ----
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const cenCache = {};
+  const cen = (key) => cenCache[key] || (cenCache[key] = (() => { const p = A.pts[key]; const c = V(0, 0, 0); for (let i = 0; i < p.length; i += 3) c.x += p[i], c.y += p[i + 1], c.z += p[i + 2]; return c.multiplyScalar(3 / p.length); })());
+  const rnd = mulberry(4242);
+  const inside = (key, shrink = 0.5) => { const p = A.pts[key], i = Math.floor(rnd() * p.length / 3) * 3; return V(p[i], p[i + 1], p[i + 2]).lerp(cen(key), shrink); };
+  const mid = (a, b) => a.clone().add(b).multiplyScalar(0.5);
+  // three glomerulus-like sub-centres of one antennal lobe (dorsal / middle / ventral thirds)
+  function glomeruli(sd) {
+    const p = A.pts['AL_' + sd], n = p.length / 3, order = Array.from({ length: n }, (_, i) => i).sort((a, b) => p[b * 3 + 1] - p[a * 3 + 1]);
+    return [0, 1, 2].map(t => { const c = V(0, 0, 0); let m = 0; for (let q = Math.floor(t * n / 3); q < Math.floor((t + 1) * n / 3); q++, m++) { const i = order[q] * 3; c.x += p[i]; c.y += p[i + 1]; c.z += p[i + 2]; } return c.multiplyScalar(1 / m).lerp(cen('AL_' + sd), 0.45); });
+  }
+
+  // ---- neurons and connections ----
+  const nodes = [], edges = [];
+  const add = (key, label, p, big = true) => { nodes.push({ key, label, p, big }); return p; };
+  const link = (src, a, b, o = {}) => {
+    const pts = o.via ? new THREE.CatmullRomCurve3([a, ...[].concat(o.via), b]).getPoints(16)
+      : new THREE.QuadraticBezierCurve3(a, mid(a, b).add(V(0, o.lift ?? 0.1, 0)), b).getPoints(10);
+    edges.push({ src, pts, w: o.w || null, tint: o.tint || null, ph: rnd() });
+  };
+  const S = { a: 'L', b: 'R' };
+  const gngC = mid(cen('GNG_a'), cen('GNG_b')), pedC = { a: cen('PED_a'), b: cen('PED_b') };
+  let topY = -9; for (let i = 1; i < A.brain.length; i += 3) topY = Math.max(topY, A.brain[i]);
+  const neck = gngC.clone().add(V(0, -0.75, -0.1));
+  // midline motor / command neurons
+  const gfP = add('gf', 'Giant Fiber (escape command)', gngC.clone().add(V(0, 0.42, -0.12)));
+  const dn = {
+    dnF: add('dnF', 'DN forward walking/flight', gngC.clone().add(V(-0.21, 0.16, 0.02))),
+    dnL: add('dnL', 'DN turn left', gngC.clone().add(V(-0.07, 0.2, 0.04))),
+    dnR: add('dnR', 'DN turn right', gngC.clone().add(V(0.07, 0.2, 0.04))),
+    dnLand: add('dnLand', 'DN landing', gngC.clone().add(V(0.21, 0.16, 0.02))),
+  };
+  const mnP = add('mn', 'Feeding motor neurons (proboscis)', gngC.clone().add(V(0, -0.14, 0.16)));
+  const hunP = add('hun', 'Hunger state (pars intercerebralis)', V(0, topY * 0.62, mid(pedC.a, pedC.b).z - 0.05));
+  link('gf', gfP, neck.clone().add(V(0, 0, -0.05)), { lift: 0 });
+  for (const k in dn) link(k, dn[k], neck.clone().add(V(dn[k].x * 0.6, 0, 0)), { lift: 0 });
+  link('hun', hunP, dn.dnLand, { lift: 0.05 });
+  const odor = [['e', 'pnE', 'Or42b ORN (ester)', 'PN ester'], ['t', 'pnT', 'Terpene ORN', 'PN terpene'], ['g', 'pnG', 'Or56a ORN (geosmin)', 'PN geosmin']];
+  const mbonP = {}, lobeEnds = {};
+  for (const sd of ['a', 'b']) {
+    const s = S[sd], gl = glomeruli(sd), caC = cen('CA_' + sd);
+    const lhP = { lhA: add('lhA', 'Lateral horn: innate attraction', inside('LH_' + sd, 0.6)), lhV: add('lhV', 'Lateral horn: innate aversion', inside('LH_' + sd, 0.6)) };
+    odor.forEach(([o, pn, ornLabel, pnLabel], j) => {
+      const glom = gl[j];
+      // ORN cell bodies sit out in the antenna, in front of and below the lobe
+      const orn = add(o + s, `${ornLabel} ${s}`, glom.clone().add(V((sd === 'a' ? -1 : 1) * 0.05, -0.2, 0.42)));
+      add(pn, `${pnLabel} projection neuron`, glom);
+      link(o + s, orn, glom, { lift: 0.04 });
+      // PN axon: antennal lobe -> mushroom-body calyx -> lateral horn (the inner antennocerebral tract)
+      link(pn, glom, o === 'g' ? lhP.lhV : lhP.lhA, { via: [mid(glom, caC).add(V(0, 0.18, -0.1)), caC.clone().add(V(0, 0.04, 0))] });
+    });
+    // mushroom-body output neurons and dopamine neurons on the lobes
+    mbonP['mbA' + sd] = add('mbA', 'MBON approach (α′ lobe)', cen('apL_' + sd).clone().add(V(0, 0.06, 0)));
+    mbonP['mbV' + sd] = add('mbV', 'MBON avoid (β′ lobe)', cen('bpL_' + sd).clone().add(V(0, -0.05, 0.03)));
+    for (const r of ['bL', 'gL', 'bpL']) add('pam', `PAM dopamine (${r === 'gL' ? 'γ' : r === 'bL' ? 'β' : 'β′'} lobe): reward`, cen(r + '_' + sd).clone().add(V(0, -0.07, 0.05)));
+    for (const r of ['aL', 'apL']) add('ppl', `PPL1 dopamine (${r === 'aL' ? 'α' : 'α′'} lobe): punishment`, cen(r + '_' + sd).clone().add(V(0, 0.08, -0.03)));
+    // taste neurons in the gnathal ganglia
+    const sugP = add('sug', `Sugar taste neuron ${s}`, inside('GNG_' + sd, 0.55)), bitP = add('bit', `Bitter taste neuron ${s}`, inside('GNG_' + sd, 0.55));
+    link('sug', sugP, mnP, { lift: -0.04 });
+    for (const n of nodes) if (n.key === 'pam' && (n.p.x < 0) === (sd === 'a')) link('sug', sugP, n.p, { lift: 0.25, tint: 'g' });
+    for (const n of nodes) if (n.key === 'ppl' && (n.p.x < 0) === (sd === 'a')) link('bit', bitP, n.p, { lift: 0.3, tint: 'r' });
+    // lateral horn -> descending neurons
+    link('lhA', lhP.lhA, dn.dnLand, { lift: 0.12 }); link('lhA', lhP.lhA, dn.dnL, { lift: 0.12 }); link('lhV', lhP.lhV, dn.dnR, { lift: 0.12 });
+    link('mbA', mbonP['mbA' + sd], dn.dnL, { lift: 0.1 }); link('mbA', mbonP['mbA' + sd], dn.dnLand, { lift: 0.1 }); link('mbV', mbonP['mbV' + sd], dn.dnR, { lift: 0.1 });
+    // optic lobe: LPLC2 looming detectors and LC10 fly detectors in the lobula
+    for (let i = 0; i < 4; i++) link('lp' + s, add('lp' + s, `LPLC2 looming detector ${s}`, inside('LO_' + sd, 0.35)), gfP, { lift: 0.15 });
+    for (let i = 0; i < 2; i++) link('lc10', add('lc10', `LC10 fly detector ${s}`, inside('LO_' + sd, 0.35)), dn.dnR, { lift: 0.15 });
+  }
+  // Kenyon cells: dendrites in the calyx, axon down the peduncle into one lobe family, synapsing on MBONs
+  const kcNodes = [];
+  for (let i = 0; i < KC_N; i++) {
+    const sd = i < KC_N / 2 ? 'a' : 'b', fam = i % 3;
+    const p = add('kc' + i, `Kenyon cell ${i + 1} (${['γ', 'α/β', 'α′/β′'][fam]})`, inside('CA_' + sd, 0.4), false); kcNodes.push(p);
+    for (let j = 0; j < 3; j++) link('pn' + 'ETG'[j], cen('CA_' + sd), p, { lift: 0.03, w: (f) => f.wiring[i][j] });
+    const ends = fam === 0 ? [cen('gL_' + sd)] : fam === 1 ? [cen('aL_' + sd), cen('bL_' + sd)] : [cen('apL_' + sd), cen('bpL_' + sd)];
+    for (const e of ends) link('kc' + i, p, e, { via: [pedC[sd]] });
+    const end = ends[ends.length - 1];
+    // these two synapses are the ones dopamine rewrites: brightness shows the learned weight
+    link('kc' + i, end, mbonP['mbA' + sd], { lift: 0.05, w: (f) => f.wA[i] });
+    link('kc' + i, end, mbonP['mbV' + sd], { lift: 0.05, w: (f) => f.wV[i] });
+  }
+
+  // ---- GPU buffers ----
+  let segN = 0; for (const e of edges) { e.o = segN; segN += e.pts.length - 1; }
+  const ePos = new Float32Array(segN * 6), eCol = new Float32Array(segN * 6);
+  for (const e of edges) for (let s = 0; s < e.pts.length - 1; s++) { const a = e.pts[s], b = e.pts[s + 1], o = (e.o + s) * 6; ePos[o] = a.x; ePos[o + 1] = a.y; ePos[o + 2] = a.z; ePos[o + 3] = b.x; ePos[o + 4] = b.y; ePos[o + 5] = b.z; }
+  const eGeo = new THREE.BufferGeometry(); eGeo.setAttribute('position', new THREE.BufferAttribute(ePos, 3)); eGeo.setAttribute('color', new THREE.BufferAttribute(eCol, 3));
+  sc.add(new THREE.LineSegments(eGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
+  // travelling pulses: one spark per connection, running source -> target
+  const pPos = new Float32Array(edges.length * 3), pCol = new Float32Array(edges.length * 3);
+  const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3)); pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+  const pulses = new THREE.Points(pGeo, glow(0.085)); pulses.frustumCulled = false; sc.add(pulses);
+  // neuron bodies: named neurons large, Kenyon cells small
+  const mkNodes = (list, size) => {
+    const pos = new Float32Array(list.length * 3), col = new Float32Array(list.length * 3);
+    list.forEach((n, i) => { pos[i * 3] = n.p.x; pos[i * 3 + 1] = n.p.y; pos[i * 3 + 2] = n.p.z; });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const pts = new THREE.Points(g, glow(size)); sc.add(pts); return { list, col, g, pts };
+  };
+  const bigN = mkNodes(nodes.filter(n => n.big), 0.16), kcN = mkNodes(nodes.filter(n => !n.big), 0.1);
+
+  // ---- per-frame colouring from the selected fly ----
+  let fly = 0, visible = true;
+  const acc = new THREE.Color(), cG = new THREE.Color('#7fd17a'), cR = new THREE.Color('#ef6b5b'), c = new THREE.Color();
+  const sm = {}, smR = {};
+  function act(f, key) {
+    let v;
+    if (key.startsWith('kc')) v = f.kc[+key.slice(2)];
+    else v = display[f.id][key] ?? f.n[key] ?? 0;
+    sm[key] = (sm[key] ?? 0) + (v - (sm[key] ?? 0)) * 0.3; return sat(sm[key]);
+  }
+  function lesioned(f, key) {
+    return ((key === 'gL' || key === 'gR' || key === 'pnG') && f.lesion.or56a) || (key === 'gf' && f.lesion.gf) || ((key === 'pam' || key === 'ppl') && f.lesion.learn);
+  }
+  function update(f, now) {
+    acc.set(f.accent);
+    // lattice
+    const L = regionLevels(f), lv = new Float32Array(regionKeys.length), dv = new Float32Array(regionKeys.length), dt = [];
+    regionKeys.forEach((k, i) => { const r = L[k] || { a: 0, dv: 0 }; smR[k] = (smR[k] ?? 0) + (r.a - (smR[k] ?? 0)) * 0.2; lv[i] = sat(smR[k]); dv[i] = r.dv || 0; dt[i] = r.dopa; });
+    for (let i = 0; i < latN; i++) {
+      const t = latTag[i], o = i * 3;
+      if (t < 0) { latCol[o] = 0.07; latCol[o + 1] = 0.12; latCol[o + 2] = 0.11; continue; }
+      c.setRGB(0.15, 0.4, 0.33).lerp(acc, lv[t] * 0.75);
+      if (dt[t] && dv[t] > 0.05) c.lerp(dt[t] === 'g' ? cG : cR, sat(dv[t]) * 0.6);
+      latCol[o] = c.r; latCol[o + 1] = c.g; latCol[o + 2] = c.b;
+    }
+    latGeo.attributes.color.needsUpdate = true;
+    // connections and pulses
+    const t = now * 0.00055;
+    for (let k = 0; k < edges.length; k++) {
+      const e = edges[k], a = lesioned(f, e.src) ? 0 : act(f, e.src), w = e.w ? e.w(f) : 1;
+      const base = e.w ? 0.04 + 0.16 * w : 0.13, lvl = base + a * w * 0.85;
+      c.copy(e.tint === 'g' ? cG : e.tint === 'r' ? cR : acc).multiplyScalar(lvl);
+      for (let s = 0; s < e.pts.length - 1; s++) { const o = (e.o + s) * 6; eCol[o] = eCol[o + 3] = c.r; eCol[o + 1] = eCol[o + 4] = c.g; eCol[o + 2] = eCol[o + 5] = c.b; }
+      const ph = (t * (1.2 + a * 2.5) + e.ph) % 1, fi = ph * (e.pts.length - 1), i0 = Math.floor(fi), u = fi - i0, p0 = e.pts[i0], p1 = e.pts[Math.min(i0 + 1, e.pts.length - 1)];
+      pPos[k * 3] = p0.x + (p1.x - p0.x) * u; pPos[k * 3 + 1] = p0.y + (p1.y - p0.y) * u; pPos[k * 3 + 2] = p0.z + (p1.z - p0.z) * u;
+      const pl = a > 0.12 ? a * w : 0;
+      c.copy(e.tint === 'g' ? cG : e.tint === 'r' ? cR : acc).lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(pl * 1.2);
+      pCol[k * 3] = c.r; pCol[k * 3 + 1] = c.g; pCol[k * 3 + 2] = c.b;
+    }
+    eGeo.attributes.color.needsUpdate = true; pGeo.attributes.position.needsUpdate = true; pGeo.attributes.color.needsUpdate = true;
+    // neuron bodies
+    for (const set of [bigN, kcN]) {
+      set.list.forEach((n, i) => {
+        const les = lesioned(f, n.key), a = les ? 0 : act(f, n.key);
+        if (les) c.set('#5a1f1a');
+        else if (n.key === 'pam') c.setRGB(0.12, 0.2, 0.12).lerp(cG, a);
+        else if (n.key === 'ppl') c.setRGB(0.2, 0.1, 0.1).lerp(cR, a);
+        else c.setRGB(0.16, 0.24, 0.21).lerp(acc, a).lerp(new THREE.Color(1, 1, 1), a * a * 0.4);
+        set.col[i * 3] = c.r; set.col[i * 3 + 1] = c.g; set.col[i * 3 + 2] = c.b;
+      });
+      set.g.attributes.color.needsUpdate = true;
+    }
+  }
+  function resize() { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; r3.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(host); resize();
+  // hover: name the neuron under the pointer and show how active it is
+  const rc = new THREE.Raycaster(), mp = new THREE.Vector2(); rc.params.Points.threshold = 0.05;
+  let hoverF = null;
+  r3.domElement.addEventListener('pointermove', (e) => {
+    const b = r3.domElement.getBoundingClientRect(); mp.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
+    rc.setFromCamera(mp, cam);
+    const hit = rc.intersectObjects([bigN.pts, kcN.pts]).sort((a, b) => a.distanceToRay - b.distanceToRay)[0];
+    hoverF = hit ? (hit.object === bigN.pts ? bigN : kcN).list[hit.index] : null;
+  });
+  r3.domElement.addEventListener('pointerleave', () => hoverF = null);
+  const bA = $('cpA'), bB = $('cpB');
+  const pick = (i) => { fly = i; bA.setAttribute('aria-pressed', i === 0); bB.setAttribute('aria-pressed', i === 1); for (const k in sm) sm[k] = 0; };
+  bA.onclick = () => pick(0); bB.onclick = () => pick(1);
+  $('cpBig').onclick = () => {
+    const big = pip.classList.toggle('big'); if (big) setMin(false);
+    $('cpBig').textContent = big ? '⤡' : '⤢'; $('cpBig').setAttribute('aria-label', big ? 'Shrink circuit view' : 'Enlarge circuit view'); resize();
+  };
+  const setMin = (m) => { if (m && pip.classList.contains('big')) $('cpBig').onclick(); pip.classList.toggle('min', m); visible = !m; $('cpMin').textContent = m ? '+' : '–'; $('cpMin').setAttribute('aria-label', m ? 'Expand circuit view' : 'Collapse circuit view'); if (!m) resize(); };
+  $('cpMin').onclick = () => setMin(visible);
+  if (window.matchMedia('(max-width: 900px)').matches) setMin(true); // phones: start collapsed so the garden stays visible
+  let tipT = 0;
+  return {
+    render(flies, now) {
+      if (!visible) return;
+      const f = flies[fly];
+      update(f, now); oc.update(); r3.render(sc, cam);
+      if (now - tipT > 120) { tipT = now; tip.textContent = hoverF ? `${hoverF.label} · ${lesioned(f, hoverF.key) ? 'silenced' : 'activity ' + act(f, hoverF.key).toFixed(2)}` : 'Drag to turn. Point at a neuron to name it.'; }
+    },
+  };
 })();
 
 // ---------- resize & loop ----------
@@ -907,6 +1170,7 @@ function frame(now) {
   controls.update();
   renderer.render(scene, camera);
   brainView.render(sim.flies);
+  circuitView.render(sim.flies, now);
   panelT += real;
   for (const f of sim.flies) drawBrain(f);
   if (panelT > 0.15) { panelT = 0; updatePanel(); }
