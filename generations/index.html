@@ -83,7 +83,12 @@ details summary{cursor:pointer;font-family:var(--f-display);font-weight:500}
 details p,details li{color:var(--muted);max-width:62ch}
 details ul{padding-left:18px;margin:6px 0}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
-.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.legend label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
+.legend input{position:absolute;opacity:0;width:1px;height:1px}
+.legend i{display:inline-grid;place-items:center;width:12px;height:12px;border-radius:3px;border:2px solid var(--c);background:var(--c)}
+.legend i::after{content:"✓";font-size:9px;font-style:normal;line-height:1;color:#0b1411;font-weight:700}
+.legend label:has(input:not(:checked)){opacity:.55} .legend label:has(input:not(:checked)) i{background:transparent} .legend label:has(input:not(:checked)) i::after{content:""}
+.legend label:has(input:focus-visible){outline:2px solid var(--flyB);outline-offset:2px;border-radius:4px}
 .pip{position:absolute;right:max(12px, env(safe-area-inset-right,0px));bottom:12px;width:min(340px,46%);background:rgba(10,18,15,.9);border:1px solid rgba(255,255,255,.1);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
 .pip-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08)}
 .pip-head b{font-family:var(--f-display);font-size:12.5px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -135,17 +140,31 @@ details ul{padding-left:18px;margin:6px 0}
 .tm-time{flex:1;min-height:0;position:relative} .tm-time canvas{position:absolute;inset:0;width:100%;height:100%}
 .tm-info{border-top:1px solid rgba(255,255,255,.08);padding:8px 12px;font-size:12px;color:var(--muted);min-height:58px}
 .tm-info b{font-weight:600}
+.tm-filters{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.08)}
+.fgroup{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-right:2px}
+.fsep{width:1px;height:18px;background:rgba(255,255,255,.12);margin:0 4px}
+.fchip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 6px;border-radius:99px;border:1px solid #2a3f36;background:#0e1a16;font-size:11.5px;cursor:pointer;user-select:none}
+.fchip input{position:absolute;opacity:0;width:1px;height:1px}
+.fchip i{width:13px;height:13px;border-radius:3px;border:2px solid var(--c);background:var(--c);display:inline-grid;place-items:center;flex:none}
+.fchip i::after{content:"✓";font-size:10px;font-style:normal;line-height:1;color:#0b1411;font-weight:700}
+.fchip:has(input:not(:checked)){opacity:.55} .fchip:has(input:not(:checked)) i{background:transparent} .fchip:has(input:not(:checked)) i::after{content:""}
+.fchip:has(input:focus-visible){outline:2px solid var(--flyB);outline-offset:2px}
+.fchip small{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+.fzoom{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);margin-left:4px}
+.fzoom input{width:110px;accent-color:var(--flyB)}
 #tmTree svg{display:block}
 #tmTree .grid{stroke:rgba(255,255,255,.04)} #tmTree .grid.major{stroke:rgba(255,255,255,.1)}
 #tmTree .axis{fill:#8aa398;font:10px "IBM Plex Mono",monospace}
 #tmTree .band{fill:rgba(255,255,255,.015)} #tmTree .band.odd{fill:rgba(255,255,255,.04)}
-#tmTree .glabel{fill:#c9d6cf;font:600 11px "IBM Plex Sans",sans-serif}
+#tmTree .glabel-bg{fill:rgba(9,16,13,.85)}
+#tmTree #bandLabels{pointer-events:none}
+#tmTree .glabel{fill:#c9d6cf;font:600 12px "IBM Plex Sans",sans-serif}
 #tmTree .link{fill:none;stroke:rgba(201,214,207,.22);stroke-width:1.2} #tmTree .link.lf{stroke-dasharray:3 3}
-#tmTree .fnode{cursor:pointer} #tmTree .fnode .life{stroke-width:4;stroke-linecap:round;opacity:.45}
+#tmTree .fnode{cursor:pointer} #tmTree .fnode .life{stroke-width:5;stroke-linecap:round;opacity:.45}
 #tmTree .fnode.alive .life{opacity:.9}
 #tmTree .fnode circle{stroke:#0b1411;stroke-width:1.5} #tmTree .fnode.wild circle{stroke:#fff;stroke-dasharray:2 2}
 #tmTree .fnode.sel circle{stroke:#fff;stroke-width:2.5}
-#tmTree .nm{fill:#c9d6cf;font:10px "IBM Plex Mono",monospace} #tmTree .dagger{fill:#8aa398;font:11px sans-serif}
+#tmTree .nm{fill:#c9d6cf;font:11px "IBM Plex Mono",monospace} #tmTree .dagger{fill:#8aa398;font:11px sans-serif}
 #tmTree.hl .fnode{opacity:.25} #tmTree.hl .fnode.on,#tmTree.hl .fnode.anc{opacity:1} #tmTree.hl .link{opacity:.15} #tmTree.hl .link.on{opacity:1;stroke:#f5efdc}
 #tmTree .fnode.on circle{stroke:#fff;stroke-width:2.5}
 @media (max-width:900px){
@@ -183,6 +202,7 @@ details ul{padding-left:18px;margin:6px 0}
         <span class="tm-meta" id="tmMeta"></span>
         <button id="tmClose" aria-label="Close generations window">✕</button>
       </div>
+      <div class="tm-filters" id="tmFilters"></div>
       <div class="tm-scroll" id="tmTree"></div>
       <div class="tm-time" id="tmTimeWrap" hidden><canvas id="tmTime"></canvas></div>
       <div class="tm-info" id="tmInfo">Each bar is one fly's life, from the day it emerged (dot) to its death (†). Lines run from the mother (solid) and father (dashed) at the moment the egg was laid. Hover a fly for its story; click a living fly to select it.</div>
@@ -226,7 +246,7 @@ details ul{padding-left:18px;margin:6px 0}
         <button class="threat-a" id="thS">Loom at selected</button>
         <label><input type="checkbox" id="odormap"> Odor map</label>
       </div>
-      <div class="legend"><span><i style="background:#ffc83c"></i>Ethyl acetate (clover, lily, fruit)</span><span><i style="background:#aa6eff"></i>Floral terpene (lily)</span><span><i style="background:#5ac85a"></i>Geosmin (rotting fruit)</span></div>
+      <div class="legend" title="Choose which smells the odor map shows"><label><input type="checkbox" data-odor="0" checked><i style="--c:#ffc83c"></i>Ethyl acetate (clover, lily, fruit)</label><label><input type="checkbox" data-odor="1" checked><i style="--c:#aa6eff"></i>Floral terpene (lily)</label><label><input type="checkbox" data-odor="2" checked><i style="--c:#5ac85a"></i>Geosmin (rotting fruit)</label></div>
     </div>
 
     <div class="card pop">
@@ -404,10 +424,12 @@ const odorCanvas = document.createElement('canvas'); odorCanvas.width = odorCanv
 const odorTex = new THREE.CanvasTexture(odorCanvas);
 const odorPlane = new THREE.Mesh(new THREE.PlaneGeometry(44, 44), new THREE.MeshBasicMaterial({ map: odorTex, transparent: true, depthWrite: false }));
 odorPlane.rotation.x = -Math.PI / 2; odorPlane.position.y = 0.04; odorPlane.visible = false; scene.add(odorPlane);
+const odorShown = [true, true, true]; // which smells the odor map paints (legend checkboxes)
 function paintOdor() {
   const ctx = odorCanvas.getContext('2d'), img = ctx.createImageData(ODOR_RES, ODOR_RES), o = [0, 0, 0];
   for (let j = 0; j < ODOR_RES; j++) for (let i = 0; i < ODOR_RES; i++) {
     const x = (i / ODOR_RES - .5) * 44, z = (j / ODOR_RES - .5) * 44; odorAt(x, z, o);
+    for (let k = 0; k < 3; k++) if (!odorShown[k]) o[k] = 0;
     const t = o[0] + o[1] + o[2] + 1e-6, idx = (j * ODOR_RES + i) * 4;
     img.data[idx] = (255 * o[0] + 170 * o[1] + 90 * o[2]) / t;
     img.data[idx + 1] = (200 * o[0] + 110 * o[1] + 200 * o[2]) / t;
@@ -1301,6 +1323,11 @@ $('reset').onclick = () => initSim();
 $('thS').onclick = () => spawnThreat(sel);
 $('wildNow').onclick = () => { if (sim.flies.length < MAX_ADULTS) { const m = sim.flies.filter(f => f.sex === 'M').length; select(spawnWild(sim, m * 2 < sim.flies.length ? 'M' : 'F')); } };
 $('odormap').onchange = (e) => { odorPlane.visible = e.target.checked; if (e.target.checked) paintOdor(); };
+for (const cb of document.querySelectorAll('.legend input[data-odor]')) cb.onchange = () => {
+  odorShown[+cb.dataset.odor] = cb.checked;
+  if (!odorPlane.visible) { $('odormap').checked = true; odorPlane.visible = true; } // ticking a smell shows the map
+  paintOdor();
+};
 $('popList').onclick = (e) => { const b = e.target.closest('.pchip'); if (b) { const f = sim.flies.find(f => f.id === +b.dataset.id); if (f) select(f); } };
 $('l1S').onchange = (e) => { if (!sel) return; sel.lesion.or56a = e.target.checked; sim.log(sel, e.target.checked ? 'lost its Or56a receptors. Rotting fruit now smells like plain ester.' : 'got its Or56a receptors back.'); };
 $('l2S').onchange = (e) => { if (!sel) return; sel.lesion.learn = e.target.checked; sim.log(sel, e.target.checked ? 'can no longer change its mushroom-body synapses.' : 'can learn again.'); };
@@ -1343,64 +1370,137 @@ controls.enablePan = false;
 // ---------- generations window: family tree + timeline ----------
 let treeOpen = false, treeTab = 'tree', treeDrawnV = -1, hoverId = null;
 $('treeBtn2').onclick = () => $('treeBtn').onclick();
-$('treeBtn').onclick = () => { treeOpen = !treeOpen; $('treeModal').hidden = !treeOpen; if (treeOpen) renderTree(true); };
+$('treeBtn').onclick = () => { treeOpen = !treeOpen; $('treeModal').hidden = !treeOpen; if (treeOpen) { treeJumpToEnd = true; renderTree(true); } };
 $('tmClose').onclick = () => { treeOpen = false; $('treeModal').hidden = true; };
 for (const b of document.querySelectorAll('.tm-tabs button')) b.onclick = () => {
   treeTab = b.dataset.tab;
   for (const o of document.querySelectorAll('.tm-tabs button')) o.setAttribute('aria-pressed', o === b);
-  $('tmTree').hidden = treeTab !== 'tree'; $('tmTimeWrap').hidden = treeTab !== 'time'; renderTree(true);
+  $('tmTree').hidden = treeTab !== 'tree'; $('tmTimeWrap').hidden = treeTab !== 'time'; filterSig = ''; renderTree(true);
 };
-const PX_DAY = 30, LANE = 18, ROW_PAD = 14, LEFT = 74, TOP = 34;
-// layout: x = time (fly days), one band per generation, each fly gets a lane where its life bar fits
-function layoutTree() {
-  const now = sim.t, recs = [...ped.values()].sort((a, b) => a.born - b.born || a.id - b.id);
-  const gens = {}; for (const r of recs) (gens[r.gen] = gens[r.gen] || []).push(r);
-  const pos = new Map(); let y = TOP; const bands = [];
-  for (const g of Object.keys(gens).map(Number).sort((a, b) => a - b)) {
-    const lanes = []; // end time of the last bar in each lane
-    for (const r of gens[g]) {
-      const s = r.born, e = r.died ?? now;
-      let li = lanes.findIndex(end => end + DAY * 1.6 < s);
-      if (li < 0) { li = lanes.length; lanes.push(e); } else lanes[li] = e;
-      pos.set(r.id, { x: LEFT + s / DAY * PX_DAY, x2: LEFT + e / DAY * PX_DAY, y: y + li * LANE + LANE / 2, r });
+// ---------- chart filters: every category in both charts can be switched on or off ----------
+const genCol = (g) => `hsl(${(g * 47 + 40) % 360} 70% 62%)`;
+const WILD_COL = '#e8e8e8';
+const hideTree = new Set(), hideTime = new Set();
+let familyOnly = false, zoomX = 1, filterSig = '', treeJumpToEnd = true;
+const bandKey = (r) => r.wild ? 'w' : 'g' + r.gen;
+const bandName = (k) => k === 'w' ? 'Wild flies' : k === 'g0' ? 'Founders' : 'Gen ' + k.slice(1);
+const bandCol = (k) => k === 'w' ? WILD_COL : genCol(+k.slice(1));
+function treeBands() { // band keys in display order, with how many flies each holds
+  const cnt = {}; for (const r of ped.values()) { const k = bandKey(r); cnt[k] = (cnt[k] || 0) + 1; }
+  const keys = Object.keys(cnt).sort((a, b) => (a === 'w' ? 0.5 : +a.slice(1)) - (b === 'w' ? 0.5 : +b.slice(1)));
+  return { keys, cnt };
+}
+function chip(key, label, color, on, count) {
+  return `<label class="fchip" style="--c:${color}"><input type="checkbox" data-k="${key}"${on ? ' checked' : ''}><i></i>${label}${count != null ? `<small>${count}</small>` : ''}</label>`;
+}
+function buildFilters() {
+  const el = $('tmFilters');
+  if (treeTab === 'tree') {
+    const { keys, cnt } = treeBands(), dead = [...ped.values()].filter(r => r.died != null).length;
+    const sig = 'tree|' + keys.join(',');
+    if (sig === filterSig) { // only refresh the counts
+      for (const s of el.querySelectorAll('small[data-c]')) s.textContent = s.dataset.c === 'dead' ? dead : cnt[s.dataset.c] || 0;
+      return;
     }
-    bands.push({ g, y, h: lanes.length * LANE }); y += lanes.length * LANE + ROW_PAD;
+    filterSig = sig;
+    el.innerHTML = `<span class="fgroup">Show</span>` + keys.map(k => chip(k, bandName(k), bandCol(k), !hideTree.has(k), null).replace('</label>', `<small data-c="${k}">${cnt[k]}</small></label>`)).join('')
+      + `<span class="fsep"></span>` + chip('dead', 'Dead flies', '#8aa398', !hideTree.has('dead'), null).replace('</label>', `<small data-c="dead">${dead}</small></label>`)
+      + chip('links', 'Parent links', '#c9d6cf', !hideTree.has('links')) + chip('names', 'Names', '#c9d6cf', !hideTree.has('names'))
+      + `<span class="fsep"></span><label class="fchip fam" style="--c:var(--flyB)"><input type="checkbox" data-k="family"${familyOnly ? ' checked' : ''}><i></i>Selected fly's family only</label>`
+      + `<label class="fzoom">Zoom <input type="range" id="tmZoom" min="0.4" max="3" step="0.1" value="${zoomX}" aria-label="Zoom the time axis"></label>`;
+  } else {
+    const S = sim.samples, maxGen = S.length ? Math.max(...S.map(s => s.maxGen)) : 0, hasWild = S.some(s => s.gens.w);
+    const sig = 'time|' + maxGen + '|' + hasWild;
+    if (sig === filterSig) return;
+    filterSig = sig;
+    const items = [['egg', 'Eggs', '#f5efdc'], ['larva', 'Larvae', '#d9cfae'], ['pupa', 'Pupae', '#9a6a38'], ['g0', 'Founders', genCol(0)]];
+    if (hasWild) items.push(['w', 'Wild flies', WILD_COL]);
+    for (let g = 1; g <= maxGen; g++) items.push(['g' + g, 'Gen ' + g, genCol(g)]);
+    items.push(['F', 'Inbreeding (dashed)', '#ef6b5b']);
+    el.innerHTML = `<span class="fgroup">Show</span>` + items.map(([k, l, c]) => chip(k, l, c, !hideTime.has(k))).join('');
   }
-  return { pos, bands, w: LEFT + (now / DAY) * PX_DAY + 120, h: y + 10 };
+}
+$('tmFilters').addEventListener('change', (e) => {
+  const k = e.target.dataset.k;
+  if (e.target.id === 'tmZoom') return;
+  if (!k) return;
+  if (k === 'family') familyOnly = e.target.checked;
+  else { const set = treeTab === 'tree' ? hideTree : hideTime; if (e.target.checked) set.delete(k); else set.add(k); }
+  renderTree(true);
+});
+$('tmFilters').addEventListener('input', (e) => { if (e.target.id === 'tmZoom') { zoomX = +e.target.value; renderTree(true); } });
+
+const LANE = 26, ROW_PAD = 18, LEFT = 92, TOP = 36;
+function pinLabels() { const g = document.getElementById('bandLabels'); if (g) g.setAttribute('transform', `translate(${$('tmTree').scrollLeft},0)`); }
+$('tmTree').addEventListener('scroll', pinLabels);
+function descendantsOf(id, out = new Set()) { const r = ped.get(id); if (r) for (const k of r.kids) if (!out.has(k)) { out.add(k); descendantsOf(k, out); } return out; }
+// layout: x = time (fly days), one band per generation (wild flies get their own band),
+// each fly gets a lane where its life bar and name fit without overlapping
+function layoutTree() {
+  const pxDay = 40 * zoomX, now = sim.t;
+  let keep = null;
+  if (familyOnly && sel) { keep = new Set([sel.id, ...ancestorsOf(sel.id), ...descendantsOf(sel.id)]); }
+  const recs = [...ped.values()].filter(r => !hideTree.has(bandKey(r)) && !(hideTree.has('dead') && r.died != null) && (!keep || keep.has(r.id)))
+    .sort((a, b) => a.born - b.born || a.id - b.id);
+  const groups = {}; for (const r of recs) (groups[bandKey(r)] = groups[bandKey(r)] || []).push(r);
+  const order = Object.keys(groups).sort((a, b) => (a === 'w' ? 0.5 : +a.slice(1)) - (b === 'w' ? 0.5 : +b.slice(1)));
+  const pos = new Map(); let y = TOP; const bands = [];
+  const gapDays = 70 / pxDay; // leave room for the name label after a bar ends
+  for (const k of order) {
+    const lanes = [];
+    for (const r of groups[k]) {
+      const s = r.born, e = r.died ?? now;
+      let li = lanes.findIndex(end => end + gapDays * DAY < s);
+      if (li < 0) { li = lanes.length; lanes.push(e); } else lanes[li] = e;
+      pos.set(r.id, { x: LEFT + s / DAY * pxDay, x2: LEFT + e / DAY * pxDay, y: y + li * LANE + LANE / 2, r });
+    }
+    bands.push({ k, y, h: lanes.length * LANE }); y += lanes.length * LANE + ROW_PAD;
+  }
+  return { pos, bands, pxDay, w: LEFT + (now / DAY) * pxDay + 140, h: y + 10 };
 }
 function ancestorsOf(id, out = new Set()) { const r = ped.get(id); if (r && r.mother != null) for (const p of [r.mother, r.father]) if (!out.has(p)) { out.add(p); ancestorsOf(p, out); } return out; }
 function renderTree(force) {
   if (!treeOpen) return;
   const living = sim.flies.length, maxGen = Math.max(0, ...[...ped.values()].map(r => r.gen));
   $('tmMeta').textContent = `founded ${wall(sim.started)} · now ${flyTime(sim.t)} · ${ped.size} flies in ${maxGen + 1} generation${maxGen ? 's' : ''} · ${living} alive`;
+  buildFilters();
   if (treeTab === 'time') { drawTimeline(); return; }
   if (!force && treeDrawnV === pedVersion && sim.t - lastTreeT < DAY / 2) return;
   treeDrawnV = pedVersion; lastTreeT = sim.t;
-  const { pos, bands, w, h } = layoutTree();
+  const { pos, bands, pxDay, w, h } = layoutTree();
+  const scroller = $('tmTree'), keepScroll = [scroller.scrollLeft, scroller.scrollTop];
   let s = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;
-  // day grid
-  const days = Math.ceil(sim.t / DAY) + 1;
-  for (let d = 0; d <= days; d++) { const x = LEFT + d * PX_DAY; s += `<line x1="${x}" y1="${TOP - 8}" x2="${x}" y2="${h}" class="grid${d % 5 ? '' : ' major'}"/>${d % 5 === 0 ? `<text x="${x + 3}" y="${TOP - 14}" class="axis">day ${d + 1}</text>` : ''}`; }
-  for (const b of bands) s += `<rect x="0" y="${b.y - 4}" width="${w}" height="${b.h + 8}" class="band${b.g % 2 ? ' odd' : ''}"/><text x="8" y="${b.y + 12}" class="glabel">${b.g === 0 ? 'Founders' : 'Gen ' + b.g}</text>`;
-  // parent links: from each parent's life bar at the moment the egg was laid, to the child's birth
-  for (const [id, p] of pos) {
+  const days = Math.ceil(sim.t / DAY) + 1, every = pxDay < 18 ? 10 : 5;
+  for (let d = 0; d <= days; d++) { const x = LEFT + d * pxDay; s += `<line x1="${x}" y1="${TOP - 8}" x2="${x}" y2="${h}" class="grid${d % every ? '' : ' major'}"/>${d % every === 0 ? `<text x="${x + 3}" y="${TOP - 16}" class="axis">day ${d + 1}</text>` : ''}`; }
+  bands.forEach((b, i) => { s += `<rect x="0" y="${b.y - 5}" width="${w}" height="${b.h + 10}" class="band${i % 2 ? ' odd' : ''}"/>`; });
+  let labels = '';
+  bands.forEach((b) => { labels += `<rect x="0" y="${b.y - 5}" width="4" height="${b.h + 10}" fill="${bandCol(b.k)}"/><rect x="6" y="${b.y + 1}" width="${bandName(b.k).length * 7.4 + 10}" height="19" rx="4" class="glabel-bg"/><text x="11" y="${b.y + 14}" class="glabel">${bandName(b.k)}</text>`; });
+  if (!bands.length) s += `<text x="${LEFT}" y="${TOP + 30}" class="glabel">Nothing to show with these filters.</text>`;
+  if (!hideTree.has('links')) for (const [id, p] of pos) {
     const r = p.r; if (r.mother == null) continue;
     for (const [pid, cls] of [[r.mother, 'lm'], [r.father, 'lf']]) {
       const q = pos.get(pid); if (!q) continue;
-      const lx = Math.min(q.x2, LEFT + (r.laidAt ?? r.born) / DAY * PX_DAY), mx = (lx + p.x) / 2;
+      const lx = Math.min(q.x2, LEFT + (r.laidAt ?? r.born) / DAY * pxDay), mx = (lx + p.x) / 2;
       s += `<path d="M${lx},${q.y} C${mx},${q.y} ${mx},${p.y} ${p.x},${p.y}" class="link ${cls}" data-c="${id}" data-p="${pid}"/>`;
     }
   }
+  const names = !hideTree.has('names');
   for (const [id, p] of pos) {
     const r = p.r, alive = r.died == null;
     s += `<g class="fnode${alive ? ' alive' : ''}${sel && sel.id === id ? ' sel' : ''}${r.wild ? ' wild' : ''}" data-id="${id}">
       <line x1="${p.x}" y1="${p.y}" x2="${Math.max(p.x + 2, p.x2)}" y2="${p.y}" stroke="${r.color}" class="life"/>
-      ${alive ? '' : `<text x="${p.x2 + 2}" y="${p.y + 3}" class="dagger">†</text>`}
-      <circle cx="${p.x}" cy="${p.y}" r="5.5" fill="${r.color}"/>
-      <text x="${p.x + 8}" y="${p.y - 4}" class="nm">${esc(r.name)}${SEX[r.sex]}</text></g>`;
+      ${alive ? '' : `<text x="${p.x2 + 3}" y="${p.y + 4}" class="dagger">†</text>`}
+      <circle cx="${p.x}" cy="${p.y}" r="6" fill="${r.color}"/>
+      ${names ? `<text x="${p.x + 9}" y="${p.y - 6}" class="nm">${esc(r.name)}${SEX[r.sex]}</text>` : ''}</g>`;
   }
-  s += '</svg>';
-  $('tmTree').innerHTML = s;
+  s += `<g id="bandLabels">${labels}</g></svg>`; // drawn last and pinned to the left edge while scrolling
+  scroller.innerHTML = s;
+  scroller.scrollLeft = keepScroll[0]; scroller.scrollTop = keepScroll[1];
+  // keep something in view: on opening jump to the newest flies; if a filter left the view empty, scroll to what's left
+  const xs = [...pos.values()].map(p => p.x), cw = scroller.clientWidth;
+  if (xs.length && (treeJumpToEnd || !xs.some(x => x >= scroller.scrollLeft && x <= scroller.scrollLeft + cw))) scroller.scrollLeft = Math.max(0, Math.max(...xs) - cw * 0.6);
+  treeJumpToEnd = false;
+  pinLabels();
   if (hoverId != null) highlight(hoverId);
 }
 let lastTreeT = 0;
@@ -1430,38 +1530,36 @@ function drawTimeline() {
   const dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
   const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   const S = sim.samples; if (S.length < 2) { ctx.fillStyle = '#8aa398'; ctx.font = '12px "IBM Plex Sans", sans-serif'; ctx.fillText('The timeline fills in as the days go by.', 16, 28); return; }
-  const L = 44, R = 46, T = 30, B = 30, pw = W - L - R, ph = H - T - B;
+  const L = 44, R = 46, T = 16, B = 30, pw = W - L - R, ph = H - T - B;
   const maxT = S[S.length - 1].t, maxGen = Math.max(...S.map(s => s.maxGen));
-  const maxY = Math.max(8, ...S.map(s => s.egg + s.larva + s.pupa + s.adults));
+  const layers = [['egg', '#f5efdc'], ['larva', '#d9cfae'], ['pupa', '#9a6a38'], ['g0', genCol(0)], ['w', WILD_COL]];
+  for (let g = 1; g <= maxGen; g++) layers.push(['g' + g, genCol(g)]);
+  const shown = layers.filter(([k]) => !hideTime.has(k));
+  const val = (s, k) => k === 'w' ? (s.gens.w || 0) : k[0] === 'g' ? (s.gens[+k.slice(1)] || 0) : s[k];
+  const maxY = Math.max(4, ...S.map(s => shown.reduce((a, [k]) => a + val(s, k), 0)));
   const X = (t) => L + t / maxT * pw, Y = (v) => T + ph - v / maxY * ph;
-  const genCol = (g) => `hsl(${(g * 47 + 40) % 360} 70% 62%)`;
-  const layers = [['egg', '#f5efdc'], ['larva', '#d9cfae'], ['pupa', '#9a6a38']];
-  for (let g = 0; g <= maxGen; g++) layers.push(['g' + g, genCol(g)]);
   const acc = new Float32Array(S.length);
-  for (const [k, col] of layers) {
+  for (const [k, col] of shown) {
     ctx.beginPath();
-    S.forEach((s, i) => { const v = k[0] === 'g' ? (s.gens[+k.slice(1)] || 0) : s[k]; const y = Y(acc[i] + v); i ? ctx.lineTo(X(s.t), y) : ctx.moveTo(X(s.t), y); });
+    S.forEach((s, i) => { const y = Y(acc[i] + val(s, k)); i ? ctx.lineTo(X(s.t), y) : ctx.moveTo(X(s.t), y); });
     for (let i = S.length - 1; i >= 0; i--) ctx.lineTo(X(S[i].t), Y(acc[i]));
     ctx.closePath(); ctx.fillStyle = col; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1;
-    S.forEach((s, i) => acc[i] += k[0] === 'g' ? (s.gens[+k.slice(1)] || 0) : s[k]);
+    S.forEach((s, i) => acc[i] += val(s, k));
   }
   // mean inbreeding of living adults (right axis, 0 to 0.5)
-  ctx.beginPath(); S.forEach((s, i) => { const y = T + ph - s.F / 0.5 * ph; i ? ctx.lineTo(X(s.t), y) : ctx.moveTo(X(s.t), y); });
-  ctx.strokeStyle = '#ef6b5b'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+  if (!hideTime.has('F')) { ctx.beginPath(); S.forEach((s, i) => { const y = T + ph - s.F / 0.5 * ph; i ? ctx.lineTo(X(s.t), y) : ctx.moveTo(X(s.t), y); });
+  ctx.strokeStyle = '#ef6b5b'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]); }
   ctx.fillStyle = '#8aa398'; ctx.font = '11px "IBM Plex Mono", monospace';
   for (let v = 0; v <= maxY; v += Math.ceil(maxY / 5)) { ctx.fillText(v, 8, Y(v) + 4); ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(L + pw, Y(v)); ctx.stroke(); }
   for (let d = 0; d <= maxT / DAY; d += Math.max(1, Math.ceil(maxT / DAY / 8))) ctx.fillText('day ' + (d + 1), X(d * DAY) - 12, H - 10);
-  ctx.fillStyle = '#ef6b5b'; ctx.fillText('0.5', W - R + 6, T + 4); ctx.fillText('0', W - R + 6, T + ph);
-  // legend
-  let lx = L; ctx.font = '11px "IBM Plex Sans", sans-serif';
-  const leg = [['eggs', '#f5efdc'], ['larvae', '#d9cfae'], ['pupae', '#9a6a38'], ...Array.from({ length: maxGen + 1 }, (_, g) => [g ? 'gen ' + g : 'founders', genCol(g)]), ['inbreeding', '#ef6b5b']];
-  for (const [t, c] of leg) { ctx.fillStyle = c; ctx.fillRect(lx, 10, 10, 10); ctx.fillStyle = '#c9d6cf'; ctx.fillText(t, lx + 14, 19); lx += ctx.measureText(t).width + 28; }
+  if (!hideTime.has('F')) { ctx.fillStyle = '#ef6b5b'; ctx.fillText('0.5', W - R + 6, T + 4); ctx.fillText('0', W - R + 6, T + ph); }
+  ctx.fillStyle = '#8aa398'; ctx.font = '11px "IBM Plex Sans", sans-serif'; ctx.fillText('flies', 8, T + 10);
 }
 function sample() {
   const c = broodCounts(), gens = {};
-  for (const f of sim.flies) gens[f.rec.gen] = (gens[f.rec.gen] || 0) + 1;
+  for (const f of sim.flies) { const k = f.rec.wild ? 'w' : f.rec.gen; gens[k] = (gens[k] || 0) + 1; }
   const F = sim.flies.length ? sim.flies.reduce((s, f) => s + f.rec.F, 0) / sim.flies.length : 0;
-  sim.samples.push({ t: sim.t, ...c, adults: sim.flies.length, gens, maxGen: Math.max(0, ...Object.keys(gens).map(Number)), F });
+  sim.samples.push({ t: sim.t, ...c, adults: sim.flies.length, gens, maxGen: Math.max(0, ...Object.keys(gens).filter(k => k !== 'w').map(Number)), F });
 }
 
 // how strongly each brain region (per hemisphere) is driven by a fly's model neurons.

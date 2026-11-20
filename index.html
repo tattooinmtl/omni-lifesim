@@ -83,7 +83,12 @@ details summary{cursor:pointer;font-family:var(--f-display);font-weight:500}
 details p,details li{color:var(--muted);max-width:62ch}
 details ul{padding-left:18px;margin:6px 0}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
-.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.legend label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
+.legend input{position:absolute;opacity:0;width:1px;height:1px}
+.legend i{display:inline-grid;place-items:center;width:12px;height:12px;border-radius:3px;border:2px solid var(--c);background:var(--c)}
+.legend i::after{content:"✓";font-size:9px;font-style:normal;line-height:1;color:#0b1411;font-weight:700}
+.legend label:has(input:not(:checked)){opacity:.55} .legend label:has(input:not(:checked)) i{background:transparent} .legend label:has(input:not(:checked)) i::after{content:""}
+.legend label:has(input:focus-visible){outline:2px solid var(--flyB);outline-offset:2px;border-radius:4px}
 .pip{position:absolute;right:max(12px, env(safe-area-inset-right,0px));bottom:12px;width:min(340px,46%);background:rgba(10,18,15,.9);border:1px solid rgba(255,255,255,.1);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
 .pip-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08)}
 .pip-head b{font-family:var(--f-display);font-size:12.5px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -171,7 +176,7 @@ details ul{padding-left:18px;margin:6px 0}
         <label><input type="checkbox" id="odormap"> Odor map</label>
         <label title="Real flies wire Kenyon cells randomly, so every individual differs"><input type="checkbox" id="indiv"> Individual KC wiring</label>
       </div>
-      <div class="legend"><span><i style="background:#ffc83c"></i>Ethyl acetate (clover, lily, fruit)</span><span><i style="background:#aa6eff"></i>Floral terpene (lily)</span><span><i style="background:#5ac85a"></i>Geosmin (rotting fruit)</span></div>
+      <div class="legend" title="Choose which smells the odor map shows"><label><input type="checkbox" data-odor="0" checked><i style="--c:#ffc83c"></i>Ethyl acetate (clover, lily, fruit)</label><label><input type="checkbox" data-odor="1" checked><i style="--c:#aa6eff"></i>Floral terpene (lily)</label><label><input type="checkbox" data-odor="2" checked><i style="--c:#5ac85a"></i>Geosmin (rotting fruit)</label></div>
     </div>
 
     <div id="cards"></div>
@@ -320,10 +325,12 @@ const odorCanvas = document.createElement('canvas'); odorCanvas.width = odorCanv
 const odorTex = new THREE.CanvasTexture(odorCanvas);
 const odorPlane = new THREE.Mesh(new THREE.PlaneGeometry(44, 44), new THREE.MeshBasicMaterial({ map: odorTex, transparent: true, depthWrite: false }));
 odorPlane.rotation.x = -Math.PI / 2; odorPlane.position.y = 0.04; odorPlane.visible = false; scene.add(odorPlane);
+const odorShown = [true, true, true]; // which smells the odor map paints (legend checkboxes)
 function paintOdor() {
   const ctx = odorCanvas.getContext('2d'), img = ctx.createImageData(ODOR_RES, ODOR_RES), o = [0, 0, 0];
   for (let j = 0; j < ODOR_RES; j++) for (let i = 0; i < ODOR_RES; i++) {
     const x = (i / ODOR_RES - .5) * 44, z = (j / ODOR_RES - .5) * 44; odorAt(x, z, o);
+    for (let k = 0; k < 3; k++) if (!odorShown[k]) o[k] = 0;
     const t = o[0] + o[1] + o[2] + 1e-6, idx = (j * ODOR_RES + i) * 4;
     img.data[idx] = (255 * o[0] + 170 * o[1] + 90 * o[2]) / t;
     img.data[idx + 1] = (200 * o[0] + 110 * o[1] + 200 * o[2]) / t;
@@ -752,6 +759,11 @@ $('indiv').onchange = () => initFlies();
 $('thA').onclick = () => spawnThreat(sim.flies[0]);
 $('thB').onclick = () => spawnThreat(sim.flies[1]);
 $('odormap').onchange = (e) => { odorPlane.visible = e.target.checked; if (e.target.checked) paintOdor(); };
+for (const cb of document.querySelectorAll('.legend input[data-odor]')) cb.onchange = () => {
+  odorShown[+cb.dataset.odor] = cb.checked;
+  if (!odorPlane.visible) { $('odormap').checked = true; odorPlane.visible = true; } // ticking a smell shows the map
+  paintOdor();
+};
 for (const id of ['A', 'B']) {
   const fly = () => sim.flies[id === 'A' ? 0 : 1];
   $('l1' + id).onchange = (e) => { fly().lesion.or56a = e.target.checked; sim.log(fly(), e.target.checked ? 'lost its Or56a receptors. Rotting fruit now smells like plain ester.' : 'got its Or56a receptors back.'); };
